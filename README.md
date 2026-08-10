@@ -62,6 +62,10 @@ only after their milestone-specific design reviews.
 To use an existing PostgreSQL server, skip the Compose command and set
 `DATABASE_URL` in `.env` to its connection URL.
 
+If port 5432 is already occupied, set `POSTGRES_PORT` before starting Compose
+and use the same port in both database URLs. For example, use port 5433 with
+`$env:POSTGRES_PORT = "5433"` in PowerShell.
+
 ### Health endpoints
 
 - `GET /api/health/live` confirms the API process is responding and never

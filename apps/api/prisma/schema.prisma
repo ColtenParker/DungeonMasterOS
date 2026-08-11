@@ -7,4 +7,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Product-domain models begin in later milestones after their design reviews.
+model World {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  name        String     @db.VarChar(120)
+  description String?    @db.VarChar(5000)
+  isArchived  Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  campaigns   Campaign[]
+
+  @@index([isArchived])
+}
+
+model Campaign {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  worldId     String   @db.Uuid
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(5000)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  world       World    @relation(fields: [worldId], references: [id], onDelete: Restrict)
+
+  @@index([worldId, isArchived])
+}

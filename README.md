@@ -28,7 +28,25 @@ See:
 - `docs/DECISION_LOG.md`
 - `docs/architecture/`
 
-## Milestone 0 Development Baseline
+## Milestone 1 World and Campaign Domain
+
+The application now supports the top-level content hierarchy:
+
+- create, list, open, edit, archive, and restore Worlds;
+- create, list, open, edit, archive, and restore Campaigns within a World;
+- active, archived, and combined browsing; and
+- validated REST APIs backed by PostgreSQL.
+
+World and Campaign names may be duplicated. Archive state is organizational,
+and archiving a World does not rewrite the archive state of its Campaigns.
+Game System modeling and permanent deletion remain deferred to their planned
+design reviews.
+
+See
+[ADR-003](docs/architecture/ADR-003-world-and-campaign-domain.md) for the
+identity, ownership, lifecycle, validation, and API decisions.
+
+## Development Baseline
 
 The repository is an npm workspace with:
 
@@ -51,20 +69,35 @@ the `DATABASE_URL` environment variable to connect to PostgreSQL.
 1. Install dependencies: `npm install`
 2. Copy `.env.example` to `.env`.
 3. Start PostgreSQL: `docker compose up -d postgres`
-4. Generate Prisma Client: `npm run db:generate`
-5. Run the migration workflow: `npm run db:migrate`
-6. Start both applications: `npm run dev`
-7. Open `http://localhost:5173` and select **Check full stack**.
+4. Wait for `docker compose ps postgres` to report `healthy`.
+5. Generate Prisma Client: `npm run db:generate`
+6. Run the migration workflow: `npm run db:migrate`
+7. Start both applications: `npm run dev`
+8. Open `http://localhost:5173`.
 
-The Prisma schema intentionally contains no product-domain tables. Those begin
-only after their milestone-specific design reviews.
+The Prisma schema and migrations include the reviewed Milestone 1 World and
+Campaign domain.
 
 To use an existing PostgreSQL server, skip the Compose command and set
 `DATABASE_URL` in `.env` to its connection URL.
 
-If port 5432 is already occupied, set `POSTGRES_PORT` before starting Compose
-and use the same port in both database URLs. For example, use port 5433 with
-`$env:POSTGRES_PORT = "5433"` in PowerShell.
+If port 5432 is already occupied, set `POSTGRES_PORT` in the ignored `.env` and
+use the same port in both database URLs. For example:
+
+```dotenv
+POSTGRES_PORT=5433
+DATABASE_URL=postgresql://dmos:dmos@localhost:5433/dmos?schema=public
+TEST_DATABASE_URL=postgresql://dmos:dmos@localhost:5433/dmos_test?schema=public
+```
+
+The Compose credentials are local-development defaults, not production
+credentials. PostgreSQL reads them only when initializing a new volume. If the
+values are changed later, update the database role explicitly or deliberately
+recreate the development volume. Merely recreating the container does not reset
+credentials or stored data.
+
+On Windows installations where Docker is available only through WSL, run the
+same Compose commands as `wsl docker compose ...` from the repository directory.
 
 ### Health endpoints
 
@@ -89,8 +122,9 @@ and use the same port in both database URLs. For example, use port 5433 with
 ### Test database safety
 
 Database integration tests must use `TEST_DATABASE_URL`, shown in
-`.env.test.example`, and must never reset the normal development database. The
-Set `TEST_DATABASE_URL` before running `npm run test:integration`. The Compose
-setup creates `dmos_test` automatically on first initialization. Unit tests
-isolate the readiness route behind a database-health interface; the integration
-test and browser check exercise the real PostgreSQL connection.
+`.env.test.example`, and must never reset the normal development database. Set
+`TEST_DATABASE_URL` before running `npm run test:integration`. The Compose setup
+creates `dmos_test` only when it initializes a new volume. Apply the committed
+migrations to that database before its first integration-test run. Unit tests
+isolate readiness behind a database-health interface; integration tests exercise
+Express and Prisma against PostgreSQL.

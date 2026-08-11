@@ -349,6 +349,14 @@ Use the following World and Campaign domain design:
   provide the lifecycle behavior required by this milestone.
 - Parse API input with Zod at runtime. Use additional targeted validation only
   if Zod cannot adequately enforce a required rule.
+- Trim World and Campaign names and require between 1 and 120 characters.
+  Optional descriptions may contain at most 5,000 characters.
+- Return API failures as `{ error: { code, message, fields? } }`. Use `400` for
+  malformed or invalid input, `404` for missing resources, and `409` for
+  lifecycle conflicts.
+- Creating a Campaign beneath an archived World is a lifecycle conflict and
+  returns `409`. Existing Campaigns beneath an archived World remain directly
+  retrievable and editable even though normal active navigation hides them.
 - Editing uses last-write-wins semantics for the single-user MVP.
 - Lists are initially unpaginated and ordered case-insensitively by name, then
   by identifier for deterministic ties.
@@ -359,9 +367,9 @@ The initial resource operations are:
 - create and list Campaigns within a World; and
 - retrieve, edit, archive, and restore individual Campaigns.
 
-Exact URL spelling, request and response DTO fields, maximum text lengths, and
-the shared error envelope must be specified and tested in the API behavior
-slice. They must not be inferred directly from generated Prisma types.
+Exact request and response DTO fields must be specified and tested in the API
+behavior slice. They must not be inferred directly from generated Prisma
+types.
 
 The UUIDv7 generation mechanism must be standards-conforming. If implementation
 requires a new runtime library, that library choice must be reviewed before it
@@ -432,10 +440,14 @@ and can be revisited based on real-use evidence.
   ownership, archive defaults, and restricted parent deletion.
 - API request tests prove Zod rejects invalid input and never exposes raw
   database errors.
+- API request tests prove validation limits and the shared error envelope and
+  status policy.
 - API tests prove active lists exclude archived records by default and explicit
   filters return archived or all records as requested.
 - API tests prove archiving a World does not modify its Campaign rows and hides
   those Campaigns from normal active navigation.
+- API tests prove Campaign creation under an archived World returns `409` while
+  direct retrieval and editing of an existing Campaign remain available.
 - API tests prove duplicate World names and duplicate Campaign names are
   accepted.
 - API tests prove deterministic case-insensitive name ordering with identifier

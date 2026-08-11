@@ -94,6 +94,23 @@ Use Option A:
 Use a dedicated test database configuration. Automated tests must not point at
 or reset the normal development database.
 
+The Compose service uses explicit local-development defaults for the database
+name, role, and password, all of which may be overridden through environment
+variables. The host port may be overridden independently with `POSTGRES_PORT`;
+all connection URLs must use the same selected port. Machine-specific values
+belong in the ignored root `.env`, while committed examples retain the
+conventional port 5432.
+
+The PostgreSQL health check must execute an authenticated query over TCP with
+the configured role and password. A socket-ready check alone is insufficient
+because it can report healthy when a persistent volume contains credentials
+that no longer match the Compose environment.
+
+Changing initialization credentials does not rewrite an existing PostgreSQL
+volume. Developers must deliberately update the database role or recreate the
+development volume; volume recreation is destructive and must never be part of
+an ordinary start, test, or migration command.
+
 Prisma schema and migrations belong to the API application. Milestone 0 may add
 only the database configuration and migration machinery necessary to prove the
 workflow; it must not introduce product-domain tables before the corresponding
@@ -123,6 +140,10 @@ scheduled for later milestones.
   application code.
 - Tests can exercise real PostgreSQL behavior without modifying development
   data.
+- Container health reflects authenticated application-style connectivity, not
+  only whether the PostgreSQL process is listening.
+- A local port override avoids conflicts without changing the portable
+  repository default.
 
 ### Negative / Tradeoffs
 
@@ -132,6 +153,8 @@ scheduled for later milestones.
 - The two supported local database paths require clear environment and setup
   documentation.
 - Database-backed tests need lifecycle and cleanup handling.
+- Credential changes require an explicit role update or destructive volume
+  recreation because PostgreSQL initialization variables are first-run inputs.
 
 ### Future implications
 

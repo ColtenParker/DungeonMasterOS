@@ -1,20 +1,12 @@
-import { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createApp } from "./app.js";
+import type { EntryStore } from "./entry-store.js";
+import { createDedicatedTestDatabase } from "./test-database.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const developmentDatabaseUrl = process.env.DATABASE_URL;
-
-if (testDatabaseUrl && testDatabaseUrl === developmentDatabaseUrl) {
-  throw new Error("TEST_DATABASE_URL must not match DATABASE_URL");
-}
-
-const database = testDatabaseUrl
-  ? new PrismaClient({ datasourceUrl: testDatabaseUrl })
-  : undefined;
+const database = createDedicatedTestDatabase();
 
 describe.skipIf(!database)("PostgreSQL readiness integration", () => {
   afterAll(async () => {
@@ -33,6 +25,7 @@ describe.skipIf(!database)("PostgreSQL readiness integration", () => {
         },
       },
       worldCampaignStore: {} as WorldCampaignStore,
+      entryStore: {} as EntryStore,
     });
 
     const response = await request(app).get("/api/health/ready");

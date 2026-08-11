@@ -1,19 +1,26 @@
 import express from "express";
 
 import type { DatabaseHealth } from "./database.js";
+import { createEntryRouter } from "./entry-api.js";
+import type { EntryStore } from "./entry-store.js";
 import { createWorldCampaignRouter } from "./world-campaign-api.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
 export interface AppDependencies {
   database: DatabaseHealth;
   worldCampaignStore: WorldCampaignStore;
+  entryStore: EntryStore;
 }
 
-export function createApp({ database, worldCampaignStore }: AppDependencies) {
+export function createApp({
+  database,
+  worldCampaignStore,
+  entryStore,
+}: AppDependencies) {
   const app = express();
 
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "32kb" }));
+  app.use(express.json({ limit: "1100kb" }));
 
   app.get("/api/health/live", (_request, response) => {
     response.json({ status: "ok" });
@@ -29,6 +36,7 @@ export function createApp({ database, worldCampaignStore }: AppDependencies) {
   });
 
   app.use("/api", createWorldCampaignRouter(worldCampaignStore));
+  app.use("/api", createEntryRouter(entryStore, worldCampaignStore));
 
   app.use(
     (
@@ -43,6 +51,21 @@ export function createApp({ database, worldCampaignStore }: AppDependencies) {
           error: {
             code: "MALFORMED_JSON",
             message: "The request body is not valid JSON.",
+          },
+        });
+        return;
+      }
+
+      if (
+        error &&
+        typeof error === "object" &&
+        "type" in error &&
+        error.type === "entity.too.large"
+      ) {
+        response.status(413).json({
+          error: {
+            code: "PAYLOAD_TOO_LARGE",
+            message: "The request body is too large.",
           },
         });
         return;

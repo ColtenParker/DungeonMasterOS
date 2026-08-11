@@ -1,18 +1,9 @@
-import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createDedicatedTestDatabase } from "./test-database.js";
 import { createPrismaWorldCampaignStore } from "./world-campaign-store.js";
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const developmentDatabaseUrl = process.env.DATABASE_URL;
-
-if (testDatabaseUrl && testDatabaseUrl === developmentDatabaseUrl) {
-  throw new Error("TEST_DATABASE_URL must not match DATABASE_URL");
-}
-
-const database = testDatabaseUrl
-  ? new PrismaClient({ datasourceUrl: testDatabaseUrl })
-  : undefined;
+const database = createDedicatedTestDatabase();
 
 describe.skipIf(!database)("World and Campaign persistence", () => {
   const store = database ? createPrismaWorldCampaignStore(database) : undefined;

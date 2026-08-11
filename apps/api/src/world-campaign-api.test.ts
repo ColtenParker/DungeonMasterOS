@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import type { EntryStore } from "./entry-store.js";
 import type {
   CampaignRecord,
   WorldCampaignStore,
@@ -55,6 +56,7 @@ function app(store: WorldCampaignStore) {
   return createApp({
     database: { checkConnection: vi.fn() },
     worldCampaignStore: store,
+    entryStore: {} as EntryStore,
   });
 }
 

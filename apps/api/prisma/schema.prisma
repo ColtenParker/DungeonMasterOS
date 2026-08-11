@@ -15,6 +15,7 @@ model World {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   campaigns   Campaign[]
+  entries     Entry[]
 
   @@index([isArchived])
 }
@@ -28,6 +29,31 @@ model Campaign {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   world       World    @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  entries     Entry[]
 
   @@index([worldId, isArchived])
+}
+
+enum EntryType {
+  NPC
+  LOCATION
+  JOURNAL
+}
+
+model Entry {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  type            EntryType
+  title           String    @db.VarChar(120)
+  document        Json
+  documentVersion Int       @default(1)
+  worldId         String?   @db.Uuid
+  campaignId      String?   @db.Uuid
+  isArchived      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  world           World?    @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+
+  @@index([worldId, type, isArchived])
+  @@index([campaignId, type, isArchived])
 }

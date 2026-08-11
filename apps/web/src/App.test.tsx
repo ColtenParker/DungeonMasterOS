@@ -50,6 +50,7 @@ describe("World and Campaign management", () => {
       .spyOn(globalThis, "fetch")
       .mockImplementation((input) => {
         const path = requestPath(input);
+        if (path.includes("/entries")) return response({ items: [] });
         if (path.includes("/campaigns")) return response({ items: [campaign] });
         return response({ items: [world] });
       });
@@ -85,6 +86,7 @@ describe("World and Campaign management", () => {
         created = true;
         return response(world, 201);
       }
+      if (path.includes("/entries")) return response({ items: [] });
       if (path.includes("/campaigns")) return response({ items: [] });
       return response({ items: created ? [world] : [] });
     });
@@ -109,6 +111,7 @@ describe("World and Campaign management", () => {
           const body = JSON.parse(requestBody(init)) as Partial<World>;
           return response({ ...world, ...body });
         }
+        if (path.includes("/entries")) return response({ items: [] });
         if (path.includes("/campaigns")) return response({ items: [] });
         return response({ items: [world] });
       });

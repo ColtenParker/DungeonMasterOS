@@ -3,15 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app.js";
 import type { DatabaseHealth } from "./database.js";
+import type { EntryStore } from "./entry-store.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
 const worldCampaignStore = {} as WorldCampaignStore;
+const entryStore = {} as EntryStore;
 
 describe("health endpoints", () => {
   it("reports liveness without querying the database", async () => {
     const database: DatabaseHealth = { checkConnection: vi.fn() };
     const response = await request(
-      createApp({ database, worldCampaignStore }),
+      createApp({ database, worldCampaignStore, entryStore }),
     ).get("/api/health/live");
 
     expect(response.status).toBe(200);
@@ -24,7 +26,7 @@ describe("health endpoints", () => {
       checkConnection: vi.fn().mockResolvedValue(undefined),
     };
     const response = await request(
-      createApp({ database, worldCampaignStore }),
+      createApp({ database, worldCampaignStore, entryStore }),
     ).get("/api/health/ready");
 
     expect(response.status).toBe(200);
@@ -38,7 +40,7 @@ describe("health endpoints", () => {
         .mockRejectedValue(new Error("secret database details")),
     };
     const response = await request(
-      createApp({ database, worldCampaignStore }),
+      createApp({ database, worldCampaignStore, entryStore }),
     ).get("/api/health/ready");
 
     expect(response.status).toBe(503);

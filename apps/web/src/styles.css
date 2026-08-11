@@ -61,6 +61,7 @@ h2 {
 .browser,
 .editor,
 .campaigns,
+.entries,
 .welcome {
   border: 1px solid #765c3d;
   border-radius: 0.8rem;
@@ -78,6 +79,7 @@ h2 {
 }
 .editor,
 .campaigns,
+.entries,
 .welcome {
   padding: clamp(1.25rem, 3vw, 2rem);
 }
@@ -194,6 +196,99 @@ button.danger {
   background: #4a211b;
 }
 
+.entry-filters {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.entry-create {
+  display: grid;
+  grid-template-columns: 10rem minmax(12rem, 1fr) 10rem auto;
+  align-items: end;
+  gap: 0.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #4d3b2b;
+}
+
+.entry-title-field {
+  min-width: 0;
+}
+
+.entry-list button > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.entry-meta {
+  justify-items: end;
+  color: #d6ad6c;
+}
+
+.scope-label {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: #a99a87;
+}
+
+.document-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.document-label {
+  color: #d7cab7;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.editor-toolbar button {
+  min-width: 2.5rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.rich-document {
+  min-height: 16rem;
+  border: 1px solid #765c3d;
+  border-radius: 0.35rem;
+  background: #120f0c;
+}
+
+.rich-document .tiptap {
+  min-height: 16rem;
+  padding: 0.8rem;
+  outline: none;
+}
+
+.rich-document .tiptap > :first-child {
+  margin-top: 0;
+}
+
+.rich-document code {
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.2rem;
+  background: #392b20;
+}
+
+.rich-document pre {
+  overflow-x: auto;
+  padding: 0.8rem;
+  border-radius: 0.35rem;
+  background: #0b0907;
+}
+
+.rich-document blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #d6ad6c;
+  color: #d7cab7;
+}
+
 @media (max-width: 760px) {
   .app-header {
     display: block;
@@ -206,5 +301,14 @@ button.danger {
   }
   .quick-create {
     grid-template-columns: 1fr;
+  }
+
+  .entry-create {
+    grid-template-columns: 1fr;
+  }
+
+  .entry-filters {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

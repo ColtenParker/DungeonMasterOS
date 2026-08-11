@@ -11,6 +11,7 @@ import {
   updateWorld,
   type World,
 } from "./api.js";
+import { EntryManager } from "./EntryManager.js";
 
 interface EditorProps {
   resource: World | Campaign;
@@ -253,10 +254,10 @@ export function App() {
     <main>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 1</p>
+          <p className="eyebrow">Milestone 2</p>
           <h1>Dungeon Master OS</h1>
         </div>
-        <p>Build the Worlds your Campaigns call home.</p>
+        <p>Build interconnected Worlds one Entry at a time.</p>
       </header>
 
       {error && (
@@ -375,6 +376,11 @@ export function App() {
                   onArchive={toggleCampaignArchive}
                 />
               )}
+              <EntryManager
+                world={selectedWorld}
+                campaign={selectedCampaign}
+                onError={setError}
+              />
             </>
           ) : (
             <section className="welcome">

@@ -46,6 +46,25 @@ See
 [ADR-003](docs/architecture/ADR-003-world-and-campaign-domain.md) for the
 identity, ownership, lifecycle, validation, and API decisions.
 
+## Milestone 2 Universal Entry Foundation
+
+Worlds and Campaigns now provide a shared notebook foundation with:
+
+- NPC, Location, and Journal Entry categories;
+- reusable World scope and isolated Campaign scope;
+- inherited World Entries while browsing a Campaign;
+- versioned, validated Tiptap/ProseMirror JSON documents;
+- explicit rich-text editing and Save behavior; and
+- active, archived, and category-filtered Entry browsing.
+
+Entry scope is immutable in this milestone. Links, tags, search, media,
+Markdown editing, specialized NPC fields, and Location hierarchy remain in
+their planned later milestones. See
+[ADR-004](docs/architecture/ADR-004-entry-identity-scope-and-specialization.md)
+and
+[ADR-005](docs/architecture/ADR-005-entry-document-persistence-and-editing.md)
+for the domain and document decisions.
+
 ## Development Baseline
 
 The repository is an npm workspace with:
@@ -123,8 +142,10 @@ same Compose commands as `wsl docker compose ...` from the repository directory.
 
 Database integration tests must use `TEST_DATABASE_URL`, shown in
 `.env.test.example`, and must never reset the normal development database. Set
-`TEST_DATABASE_URL` before running `npm run test:integration`. The Compose setup
-creates `dmos_test` only when it initializes a new volume. Apply the committed
-migrations to that database before its first integration-test run. Unit tests
-isolate readiness behind a database-health interface; integration tests exercise
-Express and Prisma against PostgreSQL.
+`TEST_DATABASE_URL` in the ignored root `.env`, then run
+`npm run test:integration`. The command rejects matching development and test
+URLs, applies committed migrations only to the test database, and runs database
+test files serially so their cleanup cannot race. The Compose setup creates
+`dmos_test` only when it initializes a new volume. Unit tests isolate readiness
+behind a database-health interface; integration tests exercise Express and
+Prisma against PostgreSQL.

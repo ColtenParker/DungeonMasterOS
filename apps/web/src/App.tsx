@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Route, Routes, useNavigate } from "react-router";
 
 import {
   type ArchiveFilter,
@@ -12,6 +13,7 @@ import {
   type World,
 } from "./api.js";
 import { EntryManager } from "./EntryManager.js";
+import { CampaignWorkspace } from "./CampaignWorkspace.js";
 
 interface EditorProps {
   resource: World | Campaign;
@@ -107,7 +109,8 @@ function ArchiveSelect({
   );
 }
 
-export function App() {
+function CampaignLibrary() {
+  const navigate = useNavigate();
   const [worlds, setWorlds] = useState<World[]>([]);
   const [worldFilter, setWorldFilter] = useState<ArchiveFilter>("active");
   const [selectedWorld, setSelectedWorld] = useState<World | null>(null);
@@ -254,7 +257,7 @@ export function App() {
     <main>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 3</p>
+          <p className="eyebrow">Campaign library</p>
           <h1>Dungeon Master OS</h1>
         </div>
         <p>Build interconnected Worlds one Entry at a time.</p>
@@ -369,18 +372,44 @@ export function App() {
                 )}
               </section>
               {selectedCampaign && (
-                <ResourceEditor
-                  resource={selectedCampaign}
-                  kind="Campaign"
-                  onSave={saveCampaign}
-                  onArchive={toggleCampaignArchive}
+                <>
+                  <ResourceEditor
+                    resource={selectedCampaign}
+                    kind="Campaign"
+                    onSave={saveCampaign}
+                    onArchive={toggleCampaignArchive}
+                  />
+                  <section
+                    className="workspace-launch"
+                    aria-label="Campaign workspace"
+                  >
+                    <div>
+                      <p className="eyebrow">Persistent workspace</p>
+                      <h2>Continue {selectedCampaign.name}</h2>
+                      <p>
+                        Reopen your Entry windows exactly where you left them.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void navigate(
+                          `/campaigns/${selectedCampaign.id}/workspace`,
+                        )
+                      }
+                    >
+                      Open Campaign Workspace
+                    </button>
+                  </section>
+                </>
+              )}
+              {!selectedCampaign && (
+                <EntryManager
+                  world={selectedWorld}
+                  campaign={null}
+                  onError={setError}
                 />
               )}
-              <EntryManager
-                world={selectedWorld}
-                campaign={selectedCampaign}
-                onError={setError}
-              />
             </>
           ) : (
             <section className="welcome">
@@ -395,5 +424,18 @@ export function App() {
         </div>
       </div>
     </main>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<CampaignLibrary />} />
+      <Route
+        path="/campaigns/:campaignId/workspace"
+        element={<CampaignWorkspace />}
+      />
+      <Route path="*" element={<CampaignLibrary />} />
+    </Routes>
   );
 }

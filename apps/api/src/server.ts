@@ -3,6 +3,7 @@ import { config } from "dotenv";
 config({ path: new URL("../../../.env", import.meta.url) });
 
 import { createApp } from "./app.js";
+import { createPrismaCampaignWorkspaceStore } from "./campaign-workspace-store.js";
 import { databaseHealth, prisma } from "./database.js";
 import { createPrismaEntryKnowledgeStore } from "./entry-knowledge-store.js";
 import { createPrismaEntryStore } from "./entry-store.js";
@@ -14,6 +15,7 @@ const app = createApp({
   worldCampaignStore: createPrismaWorldCampaignStore(prisma),
   entryStore: createPrismaEntryStore(prisma),
   entryKnowledgeStore: createPrismaEntryKnowledgeStore(prisma),
+  campaignWorkspaceStore: createPrismaCampaignWorkspaceStore(prisma),
 });
 
 const server = app.listen(port, () => {

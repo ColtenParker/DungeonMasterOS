@@ -85,6 +85,26 @@ introduces the persistent floating-window workspace. See
 [ADR-007](docs/architecture/ADR-007-world-owned-entry-tags.md), and
 [ADR-008](docs/architecture/ADR-008-postgresql-entry-search-and-quick-open.md).
 
+## Milestone 4 Campaign Workspace
+
+Each Campaign now opens into a persistent routed workspace with:
+
+- free-form floating Entry windows over a neutral base layer;
+- open-or-focus behavior shared by browsing, Quick Open, inline links,
+  relationships, and backlinks;
+- drag, resize, focus, minimize, restore, and close controls;
+- PostgreSQL-backed geometry, z-order, and minimized-state restoration;
+- duplicate prevention for Campaign and inherited World Entries; and
+- Save, Discard, and Cancel protection for unsaved Entry drafts.
+
+The workspace uses React Router, a Campaign-scoped reducer and context boundary,
+and controlled `react-rnd` interactions. Pinning, persisted utility windows, and
+selected map or Media backgrounds remain deferred. See
+[ADR-009](docs/architecture/ADR-009-campaign-workspace-persistence.md),
+[ADR-010](docs/architecture/ADR-010-campaign-workspace-client-architecture.md),
+and
+[ADR-011](docs/architecture/ADR-011-workspace-editing-accessibility-and-validation.md).
+
 ## Development Baseline
 
 The repository is an npm workspace with:
@@ -151,6 +171,8 @@ same Compose commands as `wsl docker compose ...` from the repository directory.
 - `npm run build`: build both applications
 - `npm run test`: run all unit and request-level tests
 - `npm run test:integration`: test Express and Prisma against the dedicated test database
+- `npm run test:e2e`: run the Campaign workspace browser tests against the dedicated test database
+- `npm run test:e2e:install --workspace @dmos/web`: install the Chromium browser used by Playwright
 - `npm run typecheck`: type-check both applications
 - `npm run lint`: lint the repository
 - `npm run format`: format the repository
@@ -168,4 +190,6 @@ URLs, applies committed migrations only to the test database, and runs database
 test files serially so their cleanup cannot race. The Compose setup creates
 `dmos_test` only when it initializes a new volume. Unit tests isolate readiness
 behind a database-health interface; integration tests exercise Express and
-Prisma against PostgreSQL.
+Prisma against PostgreSQL. Playwright uses the same dedicated test database,
+applies committed migrations, and refuses to start when the development and
+test database URLs match.

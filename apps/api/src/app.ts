@@ -1,5 +1,7 @@
 import express from "express";
 
+import { createCampaignWorkspaceRouter } from "./campaign-workspace-api.js";
+import type { CampaignWorkspaceStore } from "./campaign-workspace-store.js";
 import type { DatabaseHealth } from "./database.js";
 import { createEntryKnowledgeRouter } from "./entry-knowledge-api.js";
 import type { EntryKnowledgeStore } from "./entry-knowledge-store.js";
@@ -13,6 +15,7 @@ export interface AppDependencies {
   worldCampaignStore: WorldCampaignStore;
   entryStore: EntryStore;
   entryKnowledgeStore?: EntryKnowledgeStore;
+  campaignWorkspaceStore?: CampaignWorkspaceStore;
 }
 
 export function createApp({
@@ -20,6 +23,7 @@ export function createApp({
   worldCampaignStore,
   entryStore,
   entryKnowledgeStore,
+  campaignWorkspaceStore,
 }: AppDependencies) {
   const app = express();
 
@@ -41,6 +45,9 @@ export function createApp({
 
   app.use("/api", createWorldCampaignRouter(worldCampaignStore));
   app.use("/api", createEntryRouter(entryStore, worldCampaignStore));
+  if (campaignWorkspaceStore) {
+    app.use("/api", createCampaignWorkspaceRouter(campaignWorkspaceStore));
+  }
   if (entryKnowledgeStore) {
     app.use(
       "/api",

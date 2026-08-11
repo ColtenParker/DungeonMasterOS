@@ -9,11 +9,15 @@ describe.skipIf(!database)("World and Campaign persistence", () => {
   const store = database ? createPrismaWorldCampaignStore(database) : undefined;
 
   beforeEach(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.campaign.deleteMany();
     await database?.world.deleteMany();
   });
 
   afterAll(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.campaign.deleteMany();
     await database?.world.deleteMany();
     await database?.$disconnect();

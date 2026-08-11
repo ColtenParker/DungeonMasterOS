@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App.js";
@@ -39,6 +40,14 @@ function requestBody(init?: RequestInit) {
   return typeof init?.body === "string" ? init.body : "";
 }
 
+function renderApp() {
+  return render(
+    <MemoryRouter>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
 describe("World and Campaign management", () => {
   afterEach(() => {
     cleanup();
@@ -55,7 +64,7 @@ describe("World and Campaign management", () => {
         return response({ items: [world] });
       });
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "Eldoria" }));
     expect(
@@ -91,7 +100,7 @@ describe("World and Campaign management", () => {
       return response({ items: created ? [world] : [] });
     });
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.type(await screen.findByLabelText("New World name"), "Eldoria");
     await user.click(screen.getByRole("button", { name: "Create World" }));
@@ -116,7 +125,7 @@ describe("World and Campaign management", () => {
         return response({ items: [world] });
       });
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "Eldoria" }));
     const nameInput = screen.getByLabelText("Name");
@@ -159,7 +168,7 @@ describe("World and Campaign management", () => {
         },
       ),
     );
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "World service unavailable.",

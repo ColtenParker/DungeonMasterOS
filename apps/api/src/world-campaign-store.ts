@@ -111,7 +111,11 @@ export function createPrismaWorldCampaignStore(
     async createCampaign(worldId, input) {
       return toCampaign(
         await client.campaign.create({
-          data: { ...createData(input), worldId },
+          data: {
+            ...createData(input),
+            worldId,
+            workspace: { create: {} },
+          },
         }),
       );
     },

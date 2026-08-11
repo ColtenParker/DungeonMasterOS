@@ -31,8 +31,34 @@ model Campaign {
   updatedAt   DateTime @updatedAt
   world       World    @relation(fields: [worldId], references: [id], onDelete: Restrict)
   entries     Entry[]
+  workspace   CampaignWorkspace?
 
   @@index([worldId, isArchived])
+}
+
+model CampaignWorkspace {
+  id         String                 @id @default(uuid(7)) @db.Uuid
+  campaignId String                 @unique @db.Uuid
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  campaign   Campaign               @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  windows    WorkspaceEntryWindow[]
+}
+
+model WorkspaceEntryWindow {
+  workspaceId String            @db.Uuid
+  entryId     String            @db.Uuid
+  x           Int
+  y           Int
+  width       Int
+  height      Int
+  zOrder      Int
+  isMinimized Boolean           @default(false)
+  workspace   CampaignWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  entry       Entry             @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  @@id([workspaceId, entryId])
+  @@index([entryId])
 }
 
 enum EntryType {
@@ -61,6 +87,7 @@ model Entry {
   outgoingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceSource")
   incomingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceTarget")
   tagAssignments EntryTag[]
+  workspaceWindows WorkspaceEntryWindow[]
 
   @@index([worldId, type, isArchived])
   @@index([campaignId, type, isArchived])

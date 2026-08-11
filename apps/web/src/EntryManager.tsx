@@ -127,6 +127,7 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
       onError(
         reason instanceof Error ? reason.message : "Could not save Entry.",
       );
+      throw reason;
     }
   }
 

@@ -16,6 +16,24 @@ export interface Campaign extends World {
   worldId: string;
 }
 
+export interface WorkspaceWindowDescriptor {
+  entryId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zOrder: number;
+  isMinimized: boolean;
+}
+
+export interface CampaignWorkspaceSnapshot {
+  id: string;
+  campaignId: string;
+  createdAt: string;
+  updatedAt: string;
+  windows: WorkspaceWindowDescriptor[];
+}
+
 export interface Entry {
   id: string;
   type: EntryType;
@@ -122,6 +140,10 @@ export function updateWorld(
   });
 }
 
+export function getWorld(id: string) {
+  return apiRequest<World>(`/api/worlds/${id}`);
+}
+
 export function listCampaigns(worldId: string, archive: ArchiveFilter) {
   return apiRequest<ListResponse<Campaign>>(
     `/api/worlds/${worldId}/campaigns?archive=${archive}`,
@@ -146,6 +168,29 @@ export function updateCampaign(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function getCampaign(id: string) {
+  return apiRequest<Campaign>(`/api/campaigns/${id}`);
+}
+
+export function getCampaignWorkspace(campaignId: string) {
+  return apiRequest<CampaignWorkspaceSnapshot>(
+    `/api/campaigns/${campaignId}/workspace`,
+  );
+}
+
+export function replaceCampaignWorkspace(
+  campaignId: string,
+  windows: WorkspaceWindowDescriptor[],
+) {
+  return apiRequest<CampaignWorkspaceSnapshot>(
+    `/api/campaigns/${campaignId}/workspace`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ windows }),
+    },
+  );
 }
 
 export function listWorldEntries(

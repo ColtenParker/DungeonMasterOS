@@ -17,6 +17,8 @@ describe.skipIf(!database)("Entry knowledge persistence", () => {
     : undefined;
 
   beforeEach(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.entryInlineReference.deleteMany();
     await database?.entryRelationship.deleteMany();
     await database?.entryTag.deleteMany();
@@ -27,6 +29,8 @@ describe.skipIf(!database)("Entry knowledge persistence", () => {
   });
 
   afterAll(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.entryInlineReference.deleteMany();
     await database?.entryRelationship.deleteMany();
     await database?.entryTag.deleteMany();

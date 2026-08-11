@@ -10,12 +10,16 @@ describe.skipIf(!database)("Entry persistence", () => {
   const store = database ? createPrismaEntryStore(database) : undefined;
 
   beforeEach(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.entry.deleteMany();
     await database?.campaign.deleteMany();
     await database?.world.deleteMany();
   });
 
   afterAll(async () => {
+    await database?.workspaceEntryWindow.deleteMany();
+    await database?.campaignWorkspace.deleteMany();
     await database?.entry.deleteMany();
     await database?.campaign.deleteMany();
     await database?.world.deleteMany();

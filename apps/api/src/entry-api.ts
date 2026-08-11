@@ -5,9 +5,15 @@ import {
   EMPTY_ENTRY_DOCUMENT,
   ENTRY_DOCUMENT_VERSION,
   EntryDocumentValidationError,
+  extractEntryDocumentText,
+  extractEntryLinkTargetIds,
   validateEntryDocument,
 } from "./entry-document.js";
-import type { EntryRecord, EntryStore } from "./entry-store.js";
+import {
+  EntryReferenceValidationError,
+  type EntryRecord,
+  type EntryStore,
+} from "./entry-store.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
 const entryType = z.enum(["NPC", "LOCATION", "JOURNAL"]);
@@ -86,6 +92,22 @@ function archivedScope(scope: "World" | "Campaign") {
   };
 }
 
+function referenceValidationError(error: EntryReferenceValidationError) {
+  return {
+    error: {
+      code: "REFERENCE_VALIDATION_ERROR",
+      message: error.message,
+    },
+  };
+}
+
+function documentMetadata(document: EntryRecord["document"]) {
+  return {
+    documentText: extractEntryDocumentText(document),
+    inlineTargetIds: extractEntryLinkTargetIds(document),
+  };
+}
+
 function serialize(record: EntryRecord) {
   const scope = record.worldId
     ? { kind: "world" as const, id: record.worldId }
@@ -129,12 +151,20 @@ export function createEntryRouter(
       }
       const created = await entryStore.createEntry(
         { kind: "world", worldId },
-        { ...input, documentVersion: ENTRY_DOCUMENT_VERSION },
+        {
+          ...input,
+          documentVersion: ENTRY_DOCUMENT_VERSION,
+          ...documentMetadata(input.document),
+        },
       );
       response.status(201).json(serialize(created));
     } catch (error) {
       if (error instanceof ZodError) {
         response.status(400).json(validationError(error));
+        return;
+      }
+      if (error instanceof EntryReferenceValidationError) {
+        response.status(400).json(referenceValidationError(error));
         return;
       }
       throw error;
@@ -158,6 +188,10 @@ export function createEntryRouter(
     } catch (error) {
       if (error instanceof ZodError) {
         response.status(400).json(validationError(error));
+        return;
+      }
+      if (error instanceof EntryReferenceValidationError) {
+        response.status(400).json(referenceValidationError(error));
         return;
       }
       throw error;
@@ -194,11 +228,16 @@ export function createEntryRouter(
       const created = await entryStore.createEntry(entryScope, {
         ...entryData,
         documentVersion: ENTRY_DOCUMENT_VERSION,
+        ...documentMetadata(entryData.document),
       });
       response.status(201).json(serialize(created));
     } catch (error) {
       if (error instanceof ZodError) {
         response.status(400).json(validationError(error));
+        return;
+      }
+      if (error instanceof EntryReferenceValidationError) {
+        response.status(400).json(referenceValidationError(error));
         return;
       }
       throw error;
@@ -260,7 +299,10 @@ export function createEntryRouter(
         ...input,
         ...(input.document === undefined
           ? {}
-          : { documentVersion: ENTRY_DOCUMENT_VERSION }),
+          : {
+              documentVersion: ENTRY_DOCUMENT_VERSION,
+              ...documentMetadata(input.document),
+            }),
       });
       if (!entry) {
         response.status(404).json(notFound("Entry"));
@@ -270,6 +312,10 @@ export function createEntryRouter(
     } catch (error) {
       if (error instanceof ZodError) {
         response.status(400).json(validationError(error));
+        return;
+      }
+      if (error instanceof EntryReferenceValidationError) {
+        response.status(400).json(referenceValidationError(error));
         return;
       }
       throw error;

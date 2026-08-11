@@ -1,14 +1,14 @@
-import { getSchema, type JSONContent } from "@tiptap/core";
+import { getSchema, Mark, type JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 
-export const ENTRY_DOCUMENT_VERSION = 1;
+export const ENTRY_DOCUMENT_VERSION = 2;
 export const MAX_ENTRY_DOCUMENT_BYTES = 1024 * 1024;
 export const EMPTY_ENTRY_DOCUMENT: JSONContent = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
 
-export const entryDocumentExtensions = [
+const baseEntryDocumentExtensions = [
   StarterKit.configure({
     horizontalRule: false,
     link: false,
@@ -16,7 +16,36 @@ export const entryDocumentExtensions = [
   }),
 ];
 
-const entryDocumentSchema = getSchema(entryDocumentExtensions);
+export const entryLinkMark = Mark.create({
+  name: "entryLink",
+  inclusive: false,
+  addAttributes() {
+    return { entryId: { default: null } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-entry-id]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "span",
+      {
+        "data-entry-id": HTMLAttributes.entryId as string,
+        class: "entry-link",
+      },
+      0,
+    ];
+  },
+});
+
+export const entryDocumentExtensions = [
+  ...baseEntryDocumentExtensions,
+  entryLinkMark,
+];
+
+const entryDocumentSchemas = new Map([
+  [1, getSchema(baseEntryDocumentExtensions)],
+  [2, getSchema(entryDocumentExtensions)],
+]);
 const nodeTypes = new Set([
   "doc",
   "paragraph",
@@ -29,7 +58,7 @@ const nodeTypes = new Set([
   "hardBreak",
   "text",
 ]);
-const markTypes = new Set(["bold", "italic", "strike", "code"]);
+const baseMarkTypes = new Set(["bold", "italic", "strike", "code"]);
 
 export class EntryDocumentValidationError extends Error {}
 
@@ -53,18 +82,38 @@ function assertKeys(
   }
 }
 
-function validateMarks(value: unknown, path: string) {
+function validateMarks(value: unknown, path: string, documentVersion: number) {
   if (!Array.isArray(value)) {
     throw new EntryDocumentValidationError(`${path} must be an array.`);
   }
   value.forEach((rawMark, index) => {
     const markPath = `${path}[${index}]`;
     const mark = objectValue(rawMark, markPath);
-    assertKeys(mark, ["type"], markPath);
-    if (typeof mark.type !== "string" || !markTypes.has(mark.type)) {
+    const allowedMarkTypes =
+      documentVersion >= 2
+        ? new Set([...baseMarkTypes, "entryLink"])
+        : baseMarkTypes;
+    if (typeof mark.type !== "string" || !allowedMarkTypes.has(mark.type)) {
       throw new EntryDocumentValidationError(
         `${markPath}.type is not supported.`,
       );
+    }
+    if (mark.type === "entryLink") {
+      assertKeys(mark, ["type", "attrs"], markPath);
+      const attrs = objectValue(mark.attrs, `${markPath}.attrs`);
+      assertKeys(attrs, ["entryId"], `${markPath}.attrs`);
+      if (
+        typeof attrs.entryId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          attrs.entryId,
+        )
+      ) {
+        throw new EntryDocumentValidationError(
+          `${markPath}.attrs.entryId must be a UUID.`,
+        );
+      }
+    } else {
+      assertKeys(mark, ["type"], markPath);
     }
   });
 }
@@ -111,7 +160,7 @@ function validateAttrs(type: string, rawAttrs: unknown, path: string) {
   throw new EntryDocumentValidationError(`${path}.attrs is not supported.`);
 }
 
-function validateNode(rawNode: unknown, path: string) {
+function validateNode(rawNode: unknown, path: string, documentVersion: number) {
   const node = objectValue(rawNode, path);
   if (typeof node.type !== "string" || !nodeTypes.has(node.type)) {
     throw new EntryDocumentValidationError(`${path}.type is not supported.`);
@@ -131,7 +180,9 @@ function validateNode(rawNode: unknown, path: string) {
         `${path}.text must be a non-empty string.`,
       );
     }
-    if (node.marks !== undefined) validateMarks(node.marks, `${path}.marks`);
+    if (node.marks !== undefined) {
+      validateMarks(node.marks, `${path}.marks`, documentVersion);
+    }
   }
 
   if (node.attrs !== undefined) validateAttrs(node.type, node.attrs, path);
@@ -143,12 +194,21 @@ function validateNode(rawNode: unknown, path: string) {
       );
     }
     node.content.forEach((child, index) =>
-      validateNode(child, `${path}.content[${index}]`),
+      validateNode(child, `${path}.content[${index}]`, documentVersion),
     );
   }
 }
 
-export function validateEntryDocument(value: unknown): JSONContent {
+export function validateEntryDocument(
+  value: unknown,
+  documentVersion = ENTRY_DOCUMENT_VERSION,
+): JSONContent {
+  const schema = entryDocumentSchemas.get(documentVersion);
+  if (!schema) {
+    throw new EntryDocumentValidationError(
+      `Document version ${documentVersion} is not supported.`,
+    );
+  }
   let serialized: string;
   try {
     serialized = JSON.stringify(value);
@@ -163,7 +223,7 @@ export function validateEntryDocument(value: unknown): JSONContent {
     );
   }
 
-  validateNode(value, "document");
+  validateNode(value, "document", documentVersion);
   const documentObject = objectValue(value, "document");
   if (documentObject.type !== "doc") {
     throw new EntryDocumentValidationError(
@@ -172,7 +232,7 @@ export function validateEntryDocument(value: unknown): JSONContent {
   }
 
   try {
-    const documentNode = entryDocumentSchema.nodeFromJSON(value);
+    const documentNode = schema.nodeFromJSON(value);
     documentNode.check();
   } catch {
     throw new EntryDocumentValidationError(
@@ -181,4 +241,48 @@ export function validateEntryDocument(value: unknown): JSONContent {
   }
 
   return value as JSONContent;
+}
+
+function visitDocument(
+  value: JSONContent,
+  visitor: (node: JSONContent) => void,
+) {
+  visitor(value);
+  value.content?.forEach((child) => visitDocument(child, visitor));
+}
+
+export function extractEntryLinkTargetIds(document: JSONContent): string[] {
+  const identifiers = new Set<string>();
+  visitDocument(document, (node) => {
+    node.marks?.forEach((mark) => {
+      if (
+        mark.type === "entryLink" &&
+        typeof mark.attrs?.entryId === "string"
+      ) {
+        identifiers.add(mark.attrs.entryId);
+      }
+    });
+  });
+  return [...identifiers].sort();
+}
+
+function textForNode(node: JSONContent): string {
+  if (node.type === "text") return node.text ?? "";
+  if (node.type === "hardBreak") return "\n";
+  const separator = new Set([
+    "doc",
+    "blockquote",
+    "bulletList",
+    "orderedList",
+    "listItem",
+  ]).has(node.type ?? "")
+    ? "\n"
+    : "";
+  return (node.content ?? []).map(textForNode).join(separator);
+}
+
+export function extractEntryDocumentText(document: JSONContent): string {
+  return textForNode(document)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

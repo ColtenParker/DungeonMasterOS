@@ -59,6 +59,11 @@ describe("EntryManager", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation((input, init) => {
+        const path = requestPath(input);
+        if (path.endsWith("/knowledge")) {
+          return response({ outgoing: [], backlinks: [] });
+        }
+        if (path.includes("/tags")) return response({ items: [] });
         if (init?.method === "POST") {
           return response(
             { ...entry, scope: { kind: "campaign", id: campaign.id } },
@@ -96,7 +101,11 @@ describe("EntryManager", () => {
   it("filters by Entry category", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(await response({ items: [entry] }));
+      .mockImplementation((input) =>
+        requestPath(input).includes("/tags")
+          ? response({ items: [] })
+          : response({ items: [entry] }),
+      );
     const user = userEvent.setup();
     render(<EntryManager world={world} campaign={null} onError={vi.fn()} />);
 
@@ -116,6 +125,10 @@ describe("EntryManager", () => {
       .spyOn(globalThis, "fetch")
       .mockImplementation((input, init) => {
         const path = requestPath(input);
+        if (path.endsWith("/knowledge")) {
+          return response({ outgoing: [], backlinks: [] });
+        }
+        if (path.includes("/tags")) return response({ items: [] });
         if (path === `/api/entries/${entry.id}` && init?.method === "PATCH") {
           const body = JSON.parse(requestBody(init)) as Partial<Entry>;
           return response({ ...entry, ...body });

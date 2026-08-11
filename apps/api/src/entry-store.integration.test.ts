@@ -39,6 +39,8 @@ describe.skipIf(!database)("Entry persistence", () => {
     title: "Mira Vale",
     document: EMPTY_ENTRY_DOCUMENT,
     documentVersion: 1,
+    documentText: "",
+    inlineTargetIds: [] as string[],
   };
 
   it("creates UUIDv7 Entries and round-trips versioned JSON", async () => {

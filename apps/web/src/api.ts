@@ -28,6 +28,46 @@ export interface Entry {
   updatedAt: string;
 }
 
+export type EntrySummary = Pick<
+  Entry,
+  "id" | "type" | "title" | "scope" | "isArchived"
+>;
+
+export interface EntryRelationship {
+  id: string;
+  sourceEntryId: string;
+  targetEntryId: string;
+  contextNote: string | null;
+  source: EntrySummary;
+  target: EntrySummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EntryBacklink =
+  | {
+      kind: "relationship";
+      relationship: EntryRelationship;
+      source: EntrySummary;
+    }
+  | { kind: "inline"; source: EntrySummary };
+
+export interface EntryKnowledge {
+  outgoing: EntryRelationship[];
+  backlinks: EntryBacklink[];
+}
+
+export interface Tag {
+  id: string;
+  worldId: string;
+  name: string;
+}
+
+export interface SearchResult extends Entry {
+  rank: number;
+  tags: Tag[];
+}
+
 interface ListResponse<T> {
   items: T[];
 }
@@ -55,6 +95,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(message);
   }
+
+  if (response.status === 204) return undefined as T;
 
   return (await response.json()) as T;
 }
@@ -160,4 +202,87 @@ export function updateEntry(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function getEntry(id: string) {
+  return apiRequest<Entry>(`/api/entries/${id}`);
+}
+
+export function getEntryKnowledge(id: string) {
+  return apiRequest<EntryKnowledge>(`/api/entries/${id}/knowledge`);
+}
+
+export function createEntryRelationship(
+  sourceEntryId: string,
+  input: { targetEntryId: string; contextNote?: string | null },
+) {
+  return apiRequest<EntryRelationship>(
+    `/api/entries/${sourceEntryId}/relationships`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function deleteEntryRelationship(
+  sourceEntryId: string,
+  relationshipId: string,
+) {
+  return apiRequest<void>(
+    `/api/entries/${sourceEntryId}/relationships/${relationshipId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listWorldTags(worldId: string, query = "") {
+  const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+  return apiRequest<ListResponse<Tag>>(`/api/worlds/${worldId}/tags${suffix}`);
+}
+
+export function listEntryTags(entryId: string) {
+  return apiRequest<ListResponse<Tag>>(`/api/entries/${entryId}/tags`);
+}
+
+export function replaceEntryTags(entryId: string, tags: string[]) {
+  return apiRequest<ListResponse<Tag>>(`/api/entries/${entryId}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tags }),
+  });
+}
+
+export interface EntrySearchInput {
+  query?: string;
+  archive?: ArchiveFilter;
+  type?: EntryType;
+  tag?: string;
+  limit?: number;
+}
+
+function searchQuery(input: EntrySearchInput) {
+  const parameters = new URLSearchParams();
+  if (input.query) parameters.set("q", input.query);
+  if (input.archive) parameters.set("archive", input.archive);
+  if (input.type) parameters.set("type", input.type);
+  if (input.tag) parameters.set("tag", input.tag);
+  if (input.limit) parameters.set("limit", String(input.limit));
+  return parameters.toString();
+}
+
+export function searchWorldEntries(worldId: string, input: EntrySearchInput) {
+  return apiRequest<ListResponse<SearchResult>>(
+    `/api/worlds/${worldId}/search?${searchQuery(input)}`,
+  );
+}
+
+export function searchCampaignEntries(
+  campaignId: string,
+  input: EntrySearchInput,
+) {
+  return apiRequest<ListResponse<SearchResult>>(
+    `/api/campaigns/${campaignId}/search?${searchQuery(input)}`,
+  );
+}
+
+export function searchAllEntries(input: EntrySearchInput) {
+  return apiRequest<ListResponse<SearchResult>>(
+    `/api/search?${searchQuery(input)}`,
+  );
 }

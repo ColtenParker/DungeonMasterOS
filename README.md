@@ -65,6 +65,26 @@ and
 [ADR-005](docs/architecture/ADR-005-entry-document-persistence-and-editing.md)
 for the domain and document decisions.
 
+## Milestone 3 Knowledge Management
+
+Entries now support:
+
+- directed related-content links with optional context notes;
+- combined backlinks from explicit relationships and inline document mentions;
+- scope-safe inline Entry links and create-from-highlight editing;
+- World-owned tags shared by the World's Campaigns;
+- title, tag, and rich-document search through PostgreSQL full-text indexes;
+- category, World, Campaign, and global search scopes; and
+- keyboard-driven Quick Open with `Ctrl+K`.
+
+Search defaults to active Entries and provides archived filtering. Campaign
+search includes inherited World Entries, while World search remains limited to
+World-scoped canon. Quick Open selects the current editor until Milestone 4
+introduces the persistent floating-window workspace. See
+[ADR-006](docs/architecture/ADR-006-entry-relationships-and-inline-references.md),
+[ADR-007](docs/architecture/ADR-007-world-owned-entry-tags.md), and
+[ADR-008](docs/architecture/ADR-008-postgresql-entry-search-and-quick-open.md).
+
 ## Development Baseline
 
 The repository is an npm workspace with:

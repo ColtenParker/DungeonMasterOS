@@ -16,6 +16,7 @@ model World {
   updatedAt   DateTime   @updatedAt
   campaigns   Campaign[]
   entries     Entry[]
+  tags        Tag[]
 
   @@index([isArchived])
 }
@@ -46,6 +47,8 @@ model Entry {
   title           String    @db.VarChar(120)
   document        Json
   documentVersion Int       @default(1)
+  documentText    String    @default("") @db.Text
+  searchVector    Unsupported("tsvector")?
   worldId         String?   @db.Uuid
   campaignId      String?   @db.Uuid
   isArchived      Boolean   @default(false)
@@ -53,7 +56,60 @@ model Entry {
   updatedAt       DateTime  @updatedAt
   world           World?    @relation(fields: [worldId], references: [id], onDelete: Restrict)
   campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  outgoingRelationships EntryRelationship[] @relation("EntryRelationshipSource")
+  incomingRelationships EntryRelationship[] @relation("EntryRelationshipTarget")
+  outgoingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceSource")
+  incomingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceTarget")
+  tagAssignments EntryTag[]
 
   @@index([worldId, type, isArchived])
   @@index([campaignId, type, isArchived])
+}
+
+model EntryRelationship {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  sourceEntryId String   @db.Uuid
+  targetEntryId String   @db.Uuid
+  contextNote   String?  @db.VarChar(1000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sourceEntry   Entry    @relation("EntryRelationshipSource", fields: [sourceEntryId], references: [id], onDelete: Cascade)
+  targetEntry   Entry    @relation("EntryRelationshipTarget", fields: [targetEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceEntryId, targetEntryId])
+  @@index([targetEntryId])
+}
+
+model EntryInlineReference {
+  sourceEntryId String @db.Uuid
+  targetEntryId String @db.Uuid
+  sourceEntry   Entry  @relation("EntryInlineReferenceSource", fields: [sourceEntryId], references: [id], onDelete: Cascade)
+  targetEntry   Entry  @relation("EntryInlineReferenceTarget", fields: [targetEntryId], references: [id], onDelete: Restrict)
+
+  @@id([sourceEntryId, targetEntryId])
+  @@index([targetEntryId])
+}
+
+model Tag {
+  id             String     @id @default(uuid(7)) @db.Uuid
+  worldId        String     @db.Uuid
+  name           String     @db.VarChar(50)
+  normalizedName String     @db.VarChar(50)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  world          World      @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  entries        EntryTag[]
+
+  @@unique([worldId, normalizedName])
+  @@index([worldId, name])
+}
+
+model EntryTag {
+  entryId String @db.Uuid
+  tagId   String @db.Uuid
+  entry   Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, tagId])
+  @@index([tagId])
 }

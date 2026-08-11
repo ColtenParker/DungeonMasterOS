@@ -4,6 +4,7 @@ config({ path: new URL("../../../.env", import.meta.url) });
 
 import { createApp } from "./app.js";
 import { databaseHealth, prisma } from "./database.js";
+import { createPrismaEntryKnowledgeStore } from "./entry-knowledge-store.js";
 import { createPrismaEntryStore } from "./entry-store.js";
 import { createPrismaWorldCampaignStore } from "./world-campaign-store.js";
 
@@ -12,6 +13,7 @@ const app = createApp({
   database: databaseHealth,
   worldCampaignStore: createPrismaWorldCampaignStore(prisma),
   entryStore: createPrismaEntryStore(prisma),
+  entryKnowledgeStore: createPrismaEntryKnowledgeStore(prisma),
 });
 
 const server = app.listen(port, () => {

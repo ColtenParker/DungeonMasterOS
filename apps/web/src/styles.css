@@ -201,6 +201,135 @@ button.danger {
   gap: 0.75rem;
 }
 
+.entry-search,
+.inline-form,
+.relationship-form {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.entry-search label,
+.inline-form label,
+.relationship-form label {
+  flex: 1 1 12rem;
+}
+
+.quick-open {
+  position: fixed;
+  z-index: 50;
+  inset: 10vh auto auto 50%;
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: 75vh;
+  overflow: auto;
+  transform: translateX(-50%);
+  padding: 1.25rem;
+  border: 1px solid #765c3d;
+  border-radius: 0.75rem;
+  background: rgb(27 21 16 / 98%);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+
+.quick-open form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+kbd {
+  font: inherit;
+  font-size: 0.75em;
+  opacity: 0.75;
+}
+
+.entry-link {
+  color: #d6ad6c;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.link-picker {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #765c3d;
+  border-radius: 0.5rem;
+  background: #2e241a;
+}
+
+.field-help {
+  margin: 0.5rem 0 0;
+  color: #a99a87;
+  font-size: 0.85rem;
+}
+
+.entry-knowledge {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #765c3d;
+  border-radius: 0.75rem;
+  background: rgb(27 21 16 / 92%);
+}
+
+.knowledge-column h3 {
+  margin-top: 0;
+}
+
+.tag-list {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+button.tag {
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+}
+
+.knowledge-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge-list li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #765c3d;
+  border-radius: 0.4rem;
+}
+
+.knowledge-list button:not(.danger) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d6ad6c;
+  text-align: left;
+}
+
+button.compact {
+  width: fit-content;
+  padding: 0.25rem 0.45rem;
+}
+
+@media (max-width: 850px) {
+  .entry-knowledge {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-open form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .entry-create {
   display: grid;
   grid-template-columns: 10rem minmax(12rem, 1fr) 10rem auto;

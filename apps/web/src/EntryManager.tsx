@@ -6,13 +6,21 @@ import {
   createCampaignEntry,
   createWorldEntry,
   type Entry,
+  type EntrySummary,
   type EntryType,
+  getEntry,
+  listWorldTags,
   listCampaignEntries,
   listWorldEntries,
+  searchCampaignEntries,
+  searchWorldEntries,
+  type Tag,
   updateEntry,
   type World,
 } from "./api.js";
 import { EntryEditor } from "./EntryEditor.js";
+import { EntryKnowledgePanel } from "./EntryKnowledgePanel.js";
+import { QuickOpen } from "./QuickOpen.js";
 
 const typeLabels: Record<EntryType, string> = {
   NPC: "NPC",
@@ -33,22 +41,50 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
   const [type, setType] = useState<EntryType | "all">("all");
   const [newType, setNewType] = useState<EntryType>("NPC");
   const [newTitle, setNewTitle] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [activeQuery, setActiveQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [newScope, setNewScope] = useState<"campaign" | "world">(
     campaign ? "campaign" : "world",
   );
 
   const refresh = useCallback(async () => {
     const selectedType = type === "all" ? undefined : type;
-    const result = campaign
-      ? await listCampaignEntries(campaign.id, archive, selectedType)
-      : await listWorldEntries(world.id, archive, selectedType);
+    const searchInput = {
+      archive,
+      ...(activeQuery ? { query: activeQuery } : {}),
+      ...(selectedType ? { type: selectedType } : {}),
+      ...(tagFilter ? { tag: tagFilter } : {}),
+    };
+    const result =
+      activeQuery || tagFilter
+        ? campaign
+          ? await searchCampaignEntries(campaign.id, searchInput)
+          : await searchWorldEntries(world.id, searchInput)
+        : campaign
+          ? await listCampaignEntries(campaign.id, archive, selectedType)
+          : await listWorldEntries(world.id, archive, selectedType);
     setEntries(result.items);
-  }, [archive, campaign, type, world.id]);
+  }, [activeQuery, archive, campaign, tagFilter, type, world.id]);
 
   useEffect(() => {
     setSelectedEntry(null);
     setNewScope(campaign ? "campaign" : "world");
+    setSearchText("");
+    setActiveQuery("");
+    setTagFilter("");
   }, [campaign, world.id]);
+
+  useEffect(() => {
+    listWorldTags(world.id)
+      .then((result) => setAvailableTags(result.items))
+      .catch((reason: unknown) =>
+        onError(
+          reason instanceof Error ? reason.message : "Could not load tags.",
+        ),
+      );
+  }, [onError, world.id]);
 
   useEffect(() => {
     refresh().catch((reason: unknown) =>
@@ -109,6 +145,50 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
     }
   }
 
+  async function searchForSelectedEntry(query: string) {
+    if (!selectedEntry) return [];
+    const result =
+      selectedEntry.scope.kind === "campaign"
+        ? await searchCampaignEntries(selectedEntry.scope.id, {
+            query,
+            archive: "all",
+            limit: 20,
+          })
+        : await searchWorldEntries(selectedEntry.scope.id, {
+            query,
+            archive: "all",
+            limit: 20,
+          });
+    return result.items;
+  }
+
+  async function createLinkedEntry(input: {
+    type: EntryType;
+    title: string;
+    scope: "world" | "campaign";
+  }) {
+    if (!selectedEntry) throw new Error("No source Entry is open.");
+    const created =
+      selectedEntry.scope.kind === "campaign"
+        ? await createCampaignEntry(selectedEntry.scope.id, input)
+        : await createWorldEntry(selectedEntry.scope.id, {
+            type: input.type,
+            title: input.title,
+          });
+    await refresh();
+    return created;
+  }
+
+  async function openEntry(summary: Pick<EntrySummary, "id">) {
+    try {
+      setSelectedEntry(await getEntry(summary.id));
+    } catch (reason) {
+      onError(
+        reason instanceof Error ? reason.message : "Could not open Entry.",
+      );
+    }
+  }
+
   const parentArchived = world.isArchived || Boolean(campaign?.isArchived);
 
   return (
@@ -122,6 +202,12 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
             </h2>
           </div>
           <div className="entry-filters">
+            <QuickOpen
+              world={world}
+              campaign={campaign}
+              onOpen={setSelectedEntry}
+              onError={onError}
+            />
             <label className="filter">
               Category
               <select
@@ -149,8 +235,52 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
                 <option value="all">All</option>
               </select>
             </label>
+            <label className="filter">
+              Tag
+              <select
+                value={tagFilter}
+                onChange={(event) => setTagFilter(event.target.value)}
+              >
+                <option value="">All</option>
+                {availableTags.map((tag) => (
+                  <option value={tag.name} key={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
+        <form
+          className="entry-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setActiveQuery(searchText.trim());
+          }}
+        >
+          <label>
+            Search Entries
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              maxLength={200}
+            />
+          </label>
+          <button type="submit">Search</button>
+          {(activeQuery || tagFilter) && (
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => {
+                setSearchText("");
+                setActiveQuery("");
+                setTagFilter("");
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </form>
         {!parentArchived && (
           <form
             className="entry-create"
@@ -227,6 +357,19 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
           entry={selectedEntry}
           onSave={save}
           onArchive={toggleArchive}
+          onSearchEntries={searchForSelectedEntry}
+          onCreateLinkedEntry={createLinkedEntry}
+          onOpenEntryId={(entryId) => void openEntry({ id: entryId })}
+          onError={onError}
+        />
+      )}
+      {selectedEntry && (
+        <EntryKnowledgePanel
+          entry={selectedEntry}
+          worldId={world.id}
+          onSearchEntries={searchForSelectedEntry}
+          onOpenEntry={(entry) => void openEntry(entry)}
+          onError={onError}
         />
       )}
     </>

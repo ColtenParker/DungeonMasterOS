@@ -48,6 +48,7 @@ function entry(
     title: "Mira Vale",
     document: EMPTY_ENTRY_DOCUMENT,
     documentVersion: 1,
+    documentText: "",
     worldId,
     campaignId: null,
     isArchived: false,
@@ -112,7 +113,9 @@ describe("Entry API", () => {
         type: "NPC",
         title: "Mira Vale",
         document: EMPTY_ENTRY_DOCUMENT,
-        documentVersion: 1,
+        documentVersion: 2,
+        documentText: "",
+        inlineTargetIds: [],
       },
     );
     expect(response.body.scope).toEqual({ kind: "world", id: worldId });
@@ -223,6 +226,37 @@ describe("Entry API", () => {
       expect(response.body.error.fields).toHaveProperty("document");
     }
     expect(entryStore.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("derives document text and inline dependencies when saving version 2 content", async () => {
+    const targetEntryId = "0198a5d0-3d4a-7000-8000-000000000004";
+    const document = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "North Gate",
+              marks: [{ type: "entryLink", attrs: { entryId: targetEntryId } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    await request(app(worldCampaignStore, entryStore))
+      .patch(`/api/entries/${entryId}`)
+      .send({ document })
+      .expect(200);
+
+    expect(entryStore.updateEntry).toHaveBeenCalledWith(entryId, {
+      document,
+      documentVersion: 2,
+      documentText: "North Gate",
+      inlineTargetIds: [targetEntryId],
+    });
   });
 
   it("rejects document content over 1 MiB", async () => {

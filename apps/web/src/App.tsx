@@ -254,7 +254,7 @@ export function App() {
     <main>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 2</p>
+          <p className="eyebrow">Milestone 3</p>
           <h1>Dungeon Master OS</h1>
         </div>
         <p>Build interconnected Worlds one Entry at a time.</p>

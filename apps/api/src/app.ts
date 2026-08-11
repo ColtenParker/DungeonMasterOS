@@ -1,6 +1,8 @@
 import express from "express";
 
 import type { DatabaseHealth } from "./database.js";
+import { createEntryKnowledgeRouter } from "./entry-knowledge-api.js";
+import type { EntryKnowledgeStore } from "./entry-knowledge-store.js";
 import { createEntryRouter } from "./entry-api.js";
 import type { EntryStore } from "./entry-store.js";
 import { createWorldCampaignRouter } from "./world-campaign-api.js";
@@ -10,12 +12,14 @@ export interface AppDependencies {
   database: DatabaseHealth;
   worldCampaignStore: WorldCampaignStore;
   entryStore: EntryStore;
+  entryKnowledgeStore?: EntryKnowledgeStore;
 }
 
 export function createApp({
   database,
   worldCampaignStore,
   entryStore,
+  entryKnowledgeStore,
 }: AppDependencies) {
   const app = express();
 
@@ -37,6 +41,16 @@ export function createApp({
 
   app.use("/api", createWorldCampaignRouter(worldCampaignStore));
   app.use("/api", createEntryRouter(entryStore, worldCampaignStore));
+  if (entryKnowledgeStore) {
+    app.use(
+      "/api",
+      createEntryKnowledgeRouter(
+        entryKnowledgeStore,
+        entryStore,
+        worldCampaignStore,
+      ),
+    );
+  }
 
   app.use(
     (

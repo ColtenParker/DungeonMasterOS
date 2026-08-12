@@ -105,6 +105,27 @@ selected map or Media backgrounds remain deferred. See
 and
 [ADR-011](docs/architecture/ADR-011-workspace-editing-accessibility-and-validation.md).
 
+## Milestone 5 Media Library and Map Navigation
+
+Worlds and Campaigns now provide reusable local raster Media with:
+
+- PNG, JPEG, and WebP import with signature, decode, size, and pixel validation;
+- managed originals, normalized display images, and library thumbnails;
+- immutable World or Campaign scope with active and archived browsing;
+- controlled byte delivery and reference-aware permanent deletion;
+- persistent Campaign workspace image or map backgrounds;
+- layered World and Campaign map markers using normalized coordinates; and
+- marker navigation through the workspace's duplicate-safe Entry windows.
+
+The workspace Media selector does not alter open Entry windows, and missing
+managed files retain their metadata and references while the workspace falls
+back to its neutral background. Generic Entry attachments, repair workflows,
+non-raster media, pan/zoom, grids, tokens, and other VTT behavior remain
+deferred. See
+[ADR-012](docs/architecture/ADR-012-media-identity-scope-and-local-storage.md),
+[ADR-013](docs/architecture/ADR-013-media-import-delivery-and-lifecycle.md), and
+[ADR-014](docs/architecture/ADR-014-workspace-backgrounds-and-map-markers.md).
+
 ## Development Baseline
 
 The repository is an npm workspace with:
@@ -116,6 +137,9 @@ The repository is an npm workspace with:
 The browser calls relative `/api` URLs. During development, Vite proxies those
 requests to the Express API at `http://localhost:3000`. The API uses Prisma and
 the `DATABASE_URL` environment variable to connect to PostgreSQL.
+Imported Media is copied beneath the configurable `MEDIA_ROOT`; the default
+`.data/media` directory is ignored by Git. Backups must eventually include both
+PostgreSQL and this managed directory.
 
 ### Prerequisites
 

@@ -8,6 +8,7 @@ import {
   type CampaignWorkspaceRecord,
   type CampaignWorkspaceStore,
   WorkspaceScopeValidationError,
+  WorkspaceBackgroundValidationError,
 } from "./campaign-workspace-store.js";
 
 const campaignParams = z.object({ campaignId: z.uuid() });
@@ -38,6 +39,7 @@ const workspaceInput = z
       seen.add(entryId);
     });
   });
+const backgroundInput = z.object({ mediaId: z.uuid().nullable() }).strict();
 
 function validationError(error: ZodError) {
   const fields: Record<string, string[]> = {};
@@ -119,6 +121,37 @@ export function createCampaignWorkspaceRouter(store: CampaignWorkspaceStore) {
       throw error;
     }
   });
+
+  router.patch(
+    "/campaigns/:campaignId/workspace/background",
+    async (request, response) => {
+      try {
+        const { campaignId } = campaignParams.parse(request.params);
+        const { mediaId } = backgroundInput.parse(request.body);
+        const workspace = await store.updateBackground(campaignId, mediaId);
+        if (!workspace) {
+          response.status(404).json(notFound());
+          return;
+        }
+        response.json(serialize(workspace));
+      } catch (error) {
+        if (error instanceof ZodError) {
+          response.status(400).json(validationError(error));
+          return;
+        }
+        if (error instanceof WorkspaceBackgroundValidationError) {
+          response.status(422).json({
+            error: {
+              code: "INVALID_WORKSPACE_BACKGROUND",
+              message: error.message,
+            },
+          });
+          return;
+        }
+        throw error;
+      }
+    },
+  );
 
   return router;
 }

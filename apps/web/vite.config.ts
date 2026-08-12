@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { "/api": "http://localhost:3000" },
+    proxy: { "/api": process.env.DMOS_API_URL ?? "http://localhost:3000" },
   },
   test: {
     environment: "jsdom",

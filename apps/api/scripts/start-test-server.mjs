@@ -1,4 +1,7 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
@@ -20,16 +23,18 @@ const apiDirectory = fileURLToPath(new URL("..", import.meta.url));
 const prismaCli = fileURLToPath(
   new URL("../../../node_modules/prisma/build/index.js", import.meta.url),
 );
-const tsxCli = fileURLToPath(
-  new URL("../../../node_modules/tsx/dist/cli.mjs", import.meta.url),
+const tscCli = fileURLToPath(
+  new URL("../../../node_modules/typescript/bin/tsc", import.meta.url),
 );
 const schema = fileURLToPath(
   new URL("../prisma/schema.prisma", import.meta.url),
 );
+const testMediaRoot = mkdtempSync(path.join(tmpdir(), "dmos-e2e-media-"));
 const environment = {
   ...process.env,
   DATABASE_URL: testDatabaseUrl,
   PORT: "3000",
+  MEDIA_ROOT: testMediaRoot,
 };
 
 const migration = spawnSync(
@@ -40,16 +45,20 @@ const migration = spawnSync(
 if (migration.error) throw migration.error;
 if (migration.status !== 0) process.exit(migration.status ?? 1);
 
-const server = spawn(process.execPath, [tsxCli, "src/server.ts"], {
-  cwd: apiDirectory,
-  env: environment,
-  stdio: "inherit",
-});
+const build = spawnSync(
+  process.execPath,
+  [tscCli, "-p", "tsconfig.build.json"],
+  {
+    cwd: apiDirectory,
+    env: environment,
+    stdio: "inherit",
+  },
+);
+if (build.error) throw build.error;
+if (build.status !== 0) process.exit(build.status ?? 1);
 
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.kill(signal));
-}
-server.on("error", (error) => {
-  throw error;
+process.on("exit", () => {
+  rmSync(testMediaRoot, { recursive: true, force: true });
 });
-server.on("exit", (code) => process.exit(code ?? 0));
+Object.assign(process.env, environment);
+await import(new URL("../dist/server.js", import.meta.url));

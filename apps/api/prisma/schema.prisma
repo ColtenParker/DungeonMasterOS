@@ -17,6 +17,8 @@ model World {
   campaigns   Campaign[]
   entries     Entry[]
   tags        Tag[]
+  media       Media[]
+  mapMarkers  MapMarker[]
 
   @@index([isArchived])
 }
@@ -32,17 +34,23 @@ model Campaign {
   world       World    @relation(fields: [worldId], references: [id], onDelete: Restrict)
   entries     Entry[]
   workspace   CampaignWorkspace?
+  media       Media[]
+  mapMarkers  MapMarker[]
 
   @@index([worldId, isArchived])
 }
 
 model CampaignWorkspace {
-  id         String                 @id @default(uuid(7)) @db.Uuid
-  campaignId String                 @unique @db.Uuid
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-  campaign   Campaign               @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  windows    WorkspaceEntryWindow[]
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  campaignId        String                 @unique @db.Uuid
+  backgroundMediaId String?                @db.Uuid
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  campaign          Campaign               @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  backgroundMedia   Media?                 @relation(fields: [backgroundMediaId], references: [id], onDelete: Restrict)
+  windows           WorkspaceEntryWindow[]
+
+  @@index([backgroundMediaId])
 }
 
 model WorkspaceEntryWindow {
@@ -67,6 +75,11 @@ enum EntryType {
   JOURNAL
 }
 
+enum MediaType {
+  IMAGE
+  MAP
+}
+
 model Entry {
   id              String    @id @default(uuid(7)) @db.Uuid
   type            EntryType
@@ -88,9 +101,60 @@ model Entry {
   incomingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceTarget")
   tagAssignments EntryTag[]
   workspaceWindows WorkspaceEntryWindow[]
+  mapMarkers MapMarker[]
 
   @@index([worldId, type, isArchived])
   @@index([campaignId, type, isArchived])
+}
+
+model Media {
+  id                  String              @id @default(uuid(7)) @db.Uuid
+  name                String              @db.VarChar(120)
+  description         String?             @db.VarChar(5000)
+  type                MediaType
+  originalFilename    String              @db.VarChar(255)
+  mimeType            String              @db.VarChar(100)
+  byteSize            Int
+  width               Int
+  height              Int
+  checksumSha256      String              @db.Char(64)
+  originalStorageKey  String              @db.VarChar(500)
+  displayStorageKey   String              @db.VarChar(500)
+  thumbnailStorageKey String              @db.VarChar(500)
+  worldId             String?             @db.Uuid
+  campaignId          String?             @db.Uuid
+  isArchived          Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  world               World?              @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  campaign            Campaign?           @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  workspaceBackground CampaignWorkspace[]
+  markers             MapMarker[]
+
+  @@index([worldId, type, isArchived])
+  @@index([campaignId, type, isArchived])
+  @@index([checksumSha256])
+}
+
+model MapMarker {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  mediaId    String   @db.Uuid
+  entryId    String   @db.Uuid
+  worldId    String?  @db.Uuid
+  campaignId String?  @db.Uuid
+  x          Decimal  @db.Decimal(10, 9)
+  y          Decimal  @db.Decimal(10, 9)
+  label      String?  @db.VarChar(120)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  entry      Entry    @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  world      World?   @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+
+  @@index([mediaId, worldId])
+  @@index([mediaId, campaignId])
+  @@index([entryId])
 }
 
 model EntryRelationship {

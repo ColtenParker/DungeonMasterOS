@@ -7,6 +7,8 @@ import { createEntryKnowledgeRouter } from "./entry-knowledge-api.js";
 import type { EntryKnowledgeStore } from "./entry-knowledge-store.js";
 import { createEntryRouter } from "./entry-api.js";
 import type { EntryStore } from "./entry-store.js";
+import { createMediaRouter } from "./media-api.js";
+import type { MediaStore } from "./media-store.js";
 import { createWorldCampaignRouter } from "./world-campaign-api.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
@@ -16,6 +18,7 @@ export interface AppDependencies {
   entryStore: EntryStore;
   entryKnowledgeStore?: EntryKnowledgeStore;
   campaignWorkspaceStore?: CampaignWorkspaceStore;
+  mediaStore?: MediaStore;
 }
 
 export function createApp({
@@ -24,6 +27,7 @@ export function createApp({
   entryStore,
   entryKnowledgeStore,
   campaignWorkspaceStore,
+  mediaStore,
 }: AppDependencies) {
   const app = express();
 
@@ -47,6 +51,9 @@ export function createApp({
   app.use("/api", createEntryRouter(entryStore, worldCampaignStore));
   if (campaignWorkspaceStore) {
     app.use("/api", createCampaignWorkspaceRouter(campaignWorkspaceStore));
+  }
+  if (mediaStore) {
+    app.use("/api", createMediaRouter(mediaStore));
   }
   if (entryKnowledgeStore) {
     app.use(

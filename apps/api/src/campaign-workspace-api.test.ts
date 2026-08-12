@@ -22,6 +22,7 @@ function workspace(
   return {
     id: workspaceId,
     campaignId,
+    backgroundMediaId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
     windows: [],
@@ -34,6 +35,9 @@ function createStore(): CampaignWorkspaceStore {
     findWorkspace: vi.fn(async () => workspace()),
     replaceWorkspace: vi.fn(async (_campaignId, input) =>
       workspace({ windows: input.windows }),
+    ),
+    updateBackground: vi.fn(async (_campaignId, mediaId) =>
+      workspace({ backgroundMediaId: mediaId }),
     ),
   };
 }
@@ -63,6 +67,7 @@ describe("Campaign workspace API", () => {
     expect(response.body).toEqual({
       id: workspaceId,
       campaignId,
+      backgroundMediaId: null,
       createdAt: timestamp.toISOString(),
       updatedAt: timestamp.toISOString(),
       windows: [],
@@ -88,6 +93,17 @@ describe("Campaign workspace API", () => {
       windows: [window],
     });
     expect(response.body.windows).toEqual([window]);
+  });
+
+  it("updates the background independently from the window snapshot", async () => {
+    const mediaId = "0198a5d0-3d4a-7000-8000-000000000005";
+    const response = await request(app(store))
+      .patch(`/api/campaigns/${campaignId}/workspace/background`)
+      .send({ mediaId });
+
+    expect(response.status).toBe(200);
+    expect(store.updateBackground).toHaveBeenCalledWith(campaignId, mediaId);
+    expect(response.body).toMatchObject({ backgroundMediaId: mediaId });
   });
 
   it("rejects undersized geometry and unknown fields", async () => {

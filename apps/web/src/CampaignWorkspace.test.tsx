@@ -14,8 +14,11 @@ import type {
   Campaign,
   CampaignWorkspaceSnapshot,
   Entry,
+  MapMarker,
+  Media,
   World,
 } from "./api.js";
+import { containedImageBounds } from "./media-layout.js";
 
 const world: World = {
   id: "0198a5d0-3d4a-7000-8000-000000000001",
@@ -45,6 +48,7 @@ const entry: Entry = {
 const workspace: CampaignWorkspaceSnapshot = {
   id: "0198a5d0-3d4a-7000-8000-000000000004",
   campaignId: campaign.id,
+  backgroundMediaId: null,
   createdAt: world.createdAt,
   updatedAt: world.updatedAt,
   windows: [
@@ -74,7 +78,12 @@ function pathOf(input: RequestInfo | URL) {
   return input instanceof URL ? input.toString() : input.url;
 }
 
-function mockWorkspaceApi() {
+function mockWorkspaceApi(options?: {
+  workspace?: CampaignWorkspaceSnapshot;
+  media?: Media[];
+  markers?: MapMarker[];
+}) {
+  const activeWorkspace = options?.workspace ?? workspace;
   return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const path = pathOf(input);
     if (path === `/api/campaigns/${campaign.id}`) return response(campaign);
@@ -86,9 +95,21 @@ function mockWorkspaceApi() {
         ) as {
           windows: CampaignWorkspaceSnapshot["windows"];
         };
-        return response({ ...workspace, windows: body.windows });
+        return response({ ...activeWorkspace, windows: body.windows });
       }
-      return response(workspace);
+      return response(activeWorkspace);
+    }
+    if (path === `/api/campaigns/${campaign.id}/media?archive=all`) {
+      return response({ items: options?.media ?? [] });
+    }
+    if (path.endsWith("/workspace/background") && init?.method === "PATCH") {
+      const body = JSON.parse(
+        typeof init.body === "string" ? init.body : "",
+      ) as { mediaId: string | null };
+      return response({ ...activeWorkspace, backgroundMediaId: body.mediaId });
+    }
+    if (path.endsWith("/markers")) {
+      return response({ items: options?.markers ?? [] });
     }
     if (path === `/api/entries/${entry.id}` && init?.method === "PATCH") {
       const body = JSON.parse(
@@ -207,5 +228,80 @@ describe("CampaignWorkspace", () => {
         screen.queryByRole("dialog", { name: "Mira Vale" }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("renders a persisted map, opens marker targets, and patches only the background", async () => {
+    const map: Media = {
+      id: "0198a5d0-3d4a-7000-8000-000000000005",
+      name: "Old Keep",
+      description: null,
+      type: "MAP",
+      originalFilename: "keep.png",
+      mimeType: "image/png",
+      byteSize: 1024,
+      width: 1200,
+      height: 800,
+      scope: { kind: "world", id: world.id },
+      isArchived: false,
+      isAvailable: true,
+      createdAt: world.createdAt,
+      updatedAt: world.updatedAt,
+      urls: {
+        display: `/api/campaigns/${campaign.id}/media/map/display`,
+        thumbnail: `/api/campaigns/${campaign.id}/media/map/thumbnail`,
+        original: `/api/campaigns/${campaign.id}/media/map/original`,
+      },
+    };
+    const marker: MapMarker = {
+      id: "0198a5d0-3d4a-7000-8000-000000000006",
+      mediaId: map.id,
+      entryId: entry.id,
+      scope: { kind: "world", id: world.id },
+      x: 0.25,
+      y: 0.75,
+      label: "Gate",
+      createdAt: world.createdAt,
+      updatedAt: world.updatedAt,
+    };
+    const fetchMock = mockWorkspaceApi({
+      workspace: { ...workspace, backgroundMediaId: map.id },
+      media: [map],
+      markers: [marker],
+    });
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    expect(
+      await screen.findByRole("button", { name: "Gate (World)" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Gate (World)" }));
+    expect(screen.getAllByRole("dialog", { name: "Mira Vale" })).toHaveLength(
+      1,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Image or map"), "");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/campaigns/${campaign.id}/workspace/background`,
+        expect.objectContaining({ method: "PATCH" }),
+      ),
+    );
+  });
+});
+
+describe("containedImageBounds", () => {
+  it("excludes horizontal and vertical letterboxing", () => {
+    expect(
+      containedImageBounds(
+        { width: 1000, height: 1000 },
+        { width: 2000, height: 1000 },
+      ),
+    ).toEqual({ left: 0, top: 250, width: 1000, height: 500 });
+    expect(
+      containedImageBounds(
+        { width: 1200, height: 600 },
+        { width: 600, height: 1200 },
+      ),
+    ).toEqual({ left: 450, top: 0, width: 300, height: 600 });
   });
 });

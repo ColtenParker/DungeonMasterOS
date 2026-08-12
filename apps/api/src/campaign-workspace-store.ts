@@ -22,6 +22,7 @@ export interface WorkspaceWindowRecord {
 export interface CampaignWorkspaceRecord {
   id: string;
   campaignId: string;
+  backgroundMediaId: string | null;
   createdAt: Date;
   updatedAt: Date;
   windows: WorkspaceWindowRecord[];
@@ -32,12 +33,17 @@ export interface WorkspaceSnapshotInput {
 }
 
 export class WorkspaceScopeValidationError extends Error {}
+export class WorkspaceBackgroundValidationError extends Error {}
 
 export interface CampaignWorkspaceStore {
   findWorkspace(campaignId: string): Promise<CampaignWorkspaceRecord | null>;
   replaceWorkspace(
     campaignId: string,
     input: WorkspaceSnapshotInput,
+  ): Promise<CampaignWorkspaceRecord | null>;
+  updateBackground(
+    campaignId: string,
+    mediaId: string | null,
   ): Promise<CampaignWorkspaceRecord | null>;
 }
 
@@ -49,6 +55,7 @@ function toWorkspace(record: WorkspaceWithWindows): CampaignWorkspaceRecord {
   return {
     id: record.id,
     campaignId: record.campaignId,
+    backgroundMediaId: record.backgroundMediaId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     windows: record.windows
@@ -152,6 +159,42 @@ export function createPrismaCampaignWorkspaceStore(
         const updated = await readWorkspace(transaction, campaignId);
         if (!updated) {
           throw new Error("Campaign workspace disappeared during replacement.");
+        }
+        return toWorkspace(updated);
+      });
+    },
+
+    async updateBackground(campaignId, mediaId) {
+      return client.$transaction(async (transaction) => {
+        const workspace = await transaction.campaignWorkspace.findUnique({
+          where: { campaignId },
+          include: { campaign: { select: { worldId: true } } },
+        });
+        if (!workspace) return null;
+
+        if (mediaId) {
+          const media = await transaction.media.findUnique({
+            where: { id: mediaId },
+            select: { worldId: true, campaignId: true },
+          });
+          if (
+            !media ||
+            (media.campaignId !== campaignId &&
+              media.worldId !== workspace.campaign.worldId)
+          ) {
+            throw new WorkspaceBackgroundValidationError(
+              "Background Media is outside the Campaign workspace scope.",
+            );
+          }
+        }
+
+        await transaction.campaignWorkspace.update({
+          where: { id: workspace.id },
+          data: { backgroundMediaId: mediaId },
+        });
+        const updated = await readWorkspace(transaction, campaignId);
+        if (!updated) {
+          throw new Error("Campaign workspace disappeared during update.");
         }
         return toWorkspace(updated);
       });

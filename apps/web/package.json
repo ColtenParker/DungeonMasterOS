@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "dev": "vite",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "test:e2e:install": "playwright install chromium",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

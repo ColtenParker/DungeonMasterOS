@@ -29,9 +29,42 @@ export interface WorkspaceWindowDescriptor {
 export interface CampaignWorkspaceSnapshot {
   id: string;
   campaignId: string;
+  backgroundMediaId: string | null;
   createdAt: string;
   updatedAt: string;
   windows: WorkspaceWindowDescriptor[];
+}
+
+export type MediaType = "IMAGE" | "MAP";
+
+export interface Media {
+  id: string;
+  name: string;
+  description: string | null;
+  type: MediaType;
+  originalFilename: string;
+  mimeType: string;
+  byteSize: number;
+  width: number;
+  height: number;
+  scope: { kind: "world" | "campaign"; id: string };
+  isArchived: boolean;
+  isAvailable: boolean;
+  createdAt: string;
+  updatedAt: string;
+  urls: { display: string; thumbnail: string; original: string };
+}
+
+export interface MapMarker {
+  id: string;
+  mediaId: string;
+  entryId: string;
+  scope: { kind: "world" | "campaign"; id: string };
+  x: number;
+  y: number;
+  label: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Entry {
@@ -96,7 +129,9 @@ interface ApiErrorResponse {
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (init?.body) headers.set("Content-Type", "application/json");
+  if (init?.body && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
 
   const response = await fetch(path, {
     ...init,
@@ -190,6 +225,137 @@ export function replaceCampaignWorkspace(
       method: "PUT",
       body: JSON.stringify({ windows }),
     },
+  );
+}
+
+export function updateCampaignWorkspaceBackground(
+  campaignId: string,
+  mediaId: string | null,
+) {
+  return apiRequest<CampaignWorkspaceSnapshot>(
+    `/api/campaigns/${campaignId}/workspace/background`,
+    { method: "PATCH", body: JSON.stringify({ mediaId }) },
+  );
+}
+
+function mediaQuery(archive: ArchiveFilter, type?: MediaType) {
+  const query = new URLSearchParams({ archive });
+  if (type) query.set("type", type);
+  return query.toString();
+}
+
+export function listWorldMedia(
+  worldId: string,
+  archive: ArchiveFilter,
+  type?: MediaType,
+) {
+  return apiRequest<ListResponse<Media>>(
+    `/api/worlds/${worldId}/media?${mediaQuery(archive, type)}`,
+  );
+}
+
+export function listCampaignMedia(
+  campaignId: string,
+  archive: ArchiveFilter,
+  type?: MediaType,
+) {
+  return apiRequest<ListResponse<Media>>(
+    `/api/campaigns/${campaignId}/media?${mediaQuery(archive, type)}`,
+  );
+}
+
+function mediaForm(input: {
+  name: string;
+  description?: string;
+  type: MediaType;
+  file: File;
+}) {
+  const form = new FormData();
+  form.set("name", input.name);
+  if (input.description) form.set("description", input.description);
+  form.set("type", input.type);
+  form.set("file", input.file);
+  return form;
+}
+
+export function importWorldMedia(
+  worldId: string,
+  input: { name: string; description?: string; type: MediaType; file: File },
+) {
+  return apiRequest<Media>(`/api/worlds/${worldId}/media`, {
+    method: "POST",
+    body: mediaForm(input),
+  });
+}
+
+export function importCampaignMedia(
+  campaignId: string,
+  input: { name: string; description?: string; type: MediaType; file: File },
+) {
+  return apiRequest<Media>(`/api/campaigns/${campaignId}/media`, {
+    method: "POST",
+    body: mediaForm(input),
+  });
+}
+
+export function updateMedia(
+  mediaId: string,
+  input: Partial<Pick<Media, "name" | "description" | "isArchived">>,
+) {
+  return apiRequest<Media>(`/api/media/${mediaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteMedia(mediaId: string) {
+  return apiRequest<void>(`/api/media/${mediaId}`, { method: "DELETE" });
+}
+
+export function listMapMarkers(campaignId: string, mediaId: string) {
+  return apiRequest<ListResponse<MapMarker>>(
+    `/api/campaigns/${campaignId}/media/${mediaId}/markers`,
+  );
+}
+
+export function createMapMarker(
+  campaignId: string,
+  mediaId: string,
+  input: {
+    entryId: string;
+    scope: "world" | "campaign";
+    scopeId: string;
+    x: number;
+    y: number;
+    label?: string | null;
+  },
+) {
+  return apiRequest<MapMarker>(
+    `/api/campaigns/${campaignId}/media/${mediaId}/markers`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function updateMapMarker(
+  campaignId: string,
+  mediaId: string,
+  markerId: string,
+  input: Partial<Pick<MapMarker, "entryId" | "x" | "y" | "label">>,
+) {
+  return apiRequest<MapMarker>(
+    `/api/campaigns/${campaignId}/media/${mediaId}/markers/${markerId}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function deleteMapMarker(
+  campaignId: string,
+  mediaId: string,
+  markerId: string,
+) {
+  return apiRequest<void>(
+    `/api/campaigns/${campaignId}/media/${mediaId}/markers/${markerId}`,
+    { method: "DELETE" },
   );
 }
 

@@ -14,6 +14,7 @@ import {
 } from "./api.js";
 import { EntryManager } from "./EntryManager.js";
 import { CampaignWorkspace } from "./CampaignWorkspace.js";
+import { MediaLibrary } from "./MediaLibrary.js";
 
 interface EditorProps {
   resource: World | Campaign;
@@ -321,6 +322,23 @@ function CampaignLibrary() {
                 onSave={saveWorld}
                 onArchive={toggleWorldArchive}
               />
+              <section
+                className="workspace-launch"
+                aria-label="World Media Library"
+              >
+                <div>
+                  <p className="eyebrow">Reusable resources</p>
+                  <h2>World Media Library</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void navigate(`/worlds/${selectedWorld.id}/media`)
+                  }
+                >
+                  Open World Media
+                </button>
+              </section>
               <section className="campaigns" aria-label="Campaign browser">
                 <div className="section-heading">
                   <h2>Campaigns</h2>
@@ -400,6 +418,15 @@ function CampaignLibrary() {
                     >
                       Open Campaign Workspace
                     </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() =>
+                        void navigate(`/campaigns/${selectedCampaign.id}/media`)
+                      }
+                    >
+                      Open Campaign Media
+                    </button>
                   </section>
                 </>
               )}
@@ -435,6 +462,8 @@ export function App() {
         path="/campaigns/:campaignId/workspace"
         element={<CampaignWorkspace />}
       />
+      <Route path="/worlds/:worldId/media" element={<MediaLibrary />} />
+      <Route path="/campaigns/:campaignId/media" element={<MediaLibrary />} />
       <Route path="*" element={<CampaignLibrary />} />
     </Routes>
   );

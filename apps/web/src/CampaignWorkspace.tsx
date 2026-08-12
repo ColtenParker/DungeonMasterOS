@@ -1,6 +1,7 @@
 import {
   type FormEvent,
   type RefCallback,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
@@ -24,19 +25,28 @@ import {
   getCampaignWorkspace,
   getEntry,
   getWorld,
+  createMapMarker,
+  deleteMapMarker,
+  listCampaignMedia,
+  listMapMarkers,
   listCampaignEntries,
   listWorldTags,
   replaceCampaignWorkspace,
   searchCampaignEntries,
   searchWorldEntries,
   type Tag,
+  type MapMarker,
+  type Media,
   updateEntry,
+  updateCampaignWorkspaceBackground,
+  updateMapMarker,
   type WorkspaceWindowDescriptor,
   type World,
 } from "./api.js";
 import { EntryEditor, type EntryEditorHandle } from "./EntryEditor.js";
 import { EntryKnowledgePanel } from "./EntryKnowledgePanel.js";
 import { QuickOpen } from "./QuickOpen.js";
+import { containedImageBounds } from "./media-layout.js";
 import {
   clampWindowGeometry,
   initialWorkspaceState,
@@ -59,6 +69,7 @@ interface WorkspaceEntryBrowserProps {
   campaign: Campaign;
   revision: number;
   onError: (message: string) => void;
+  mediaControls: ReactNode;
 }
 
 interface CampaignWorkspaceContextValue {
@@ -81,6 +92,7 @@ function WorkspaceEntryBrowser({
   campaign,
   revision,
   onError,
+  mediaControls,
 }: WorkspaceEntryBrowserProps) {
   const { openEntry } = useCampaignWorkspaceContext();
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -162,6 +174,8 @@ function WorkspaceEntryBrowser({
         onOpen={openEntry}
         onError={onError}
       />
+
+      {mediaControls}
 
       <form
         className="workspace-search"
@@ -497,6 +511,25 @@ export function CampaignWorkspace() {
     null,
   );
   const [leaveRequested, setLeaveRequested] = useState(false);
+  const [media, setMedia] = useState<Media[]>([]);
+  const [backgroundMediaId, setBackgroundMediaId] = useState<string | null>(
+    null,
+  );
+  const [backgroundSaveState, setBackgroundSaveState] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
+  const [failedBackgroundId, setFailedBackgroundId] = useState<
+    string | null | undefined
+  >(undefined);
+  const [markers, setMarkers] = useState<MapMarker[]>([]);
+  const [markerEditMode, setMarkerEditMode] = useState(false);
+  const [markerScope, setMarkerScope] = useState<"campaign" | "world">(
+    "campaign",
+  );
+  const [markerEntryId, setMarkerEntryId] = useState("");
+  const [markerLabel, setMarkerLabel] = useState("");
+  const [markerTargets, setMarkerTargets] = useState<Entry[]>([]);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   stateRef.current = state;
 
   const drainSaves = useCallback(async () => {
@@ -548,12 +581,18 @@ export function CampaignWorkspace() {
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all([getCampaign(campaignId), getCampaignWorkspace(campaignId)])
-      .then(async ([nextCampaign, workspace]) => {
+    Promise.all([
+      getCampaign(campaignId),
+      getCampaignWorkspace(campaignId),
+      listCampaignMedia(campaignId, "all"),
+    ])
+      .then(async ([nextCampaign, workspace, mediaResult]) => {
         const nextWorld = await getWorld(nextCampaign.worldId);
         if (!active) return;
         setCampaign(nextCampaign);
         setWorld(nextWorld);
+        setMedia(mediaResult.items);
+        setBackgroundMediaId(workspace.backgroundMediaId);
         dispatch({ type: "hydrate", windows: workspace.windows });
         await Promise.all(
           workspace.windows.map(async ({ entryId }) => {
@@ -591,6 +630,168 @@ export function CampaignWorkspace() {
       active = false;
     };
   }, [campaignId]);
+
+  const backgroundMedia =
+    media.find(({ id }) => id === backgroundMediaId) ?? null;
+  const mapBounds = backgroundMedia
+    ? containedImageBounds(bounds, backgroundMedia)
+    : { left: 0, top: 0, width: 0, height: 0 };
+
+  const refreshMarkers = useCallback(async () => {
+    if (!campaignId || !backgroundMedia || backgroundMedia.type !== "MAP") {
+      setMarkers([]);
+      return;
+    }
+    const result = await listMapMarkers(campaignId, backgroundMedia.id);
+    setMarkers(result.items);
+  }, [backgroundMedia, campaignId]);
+
+  useEffect(() => {
+    refreshMarkers().catch((reason: unknown) =>
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not load map markers.",
+      ),
+    );
+    setMarkerEditMode(false);
+    setSelectedMarkerId(null);
+  }, [refreshMarkers]);
+
+  useEffect(() => {
+    if (!markerEditMode || !campaign) return;
+    listCampaignEntries(campaign.id, "all")
+      .then((result) => {
+        setMarkerTargets(result.items);
+        setMarkerEntryId((current) => current || result.items[0]?.id || "");
+      })
+      .catch((reason: unknown) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not load marker targets.",
+        ),
+      );
+  }, [campaign, markerEditMode]);
+
+  async function saveBackground(mediaId: string | null) {
+    if (!campaignId) return;
+    setBackgroundMediaId(mediaId);
+    setBackgroundSaveState("saving");
+    try {
+      await updateCampaignWorkspaceBackground(campaignId, mediaId);
+      setFailedBackgroundId(undefined);
+      setBackgroundSaveState("saved");
+    } catch (reason) {
+      setFailedBackgroundId(mediaId);
+      setBackgroundSaveState("failed");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not save the background.",
+      );
+    }
+  }
+
+  function eligibleMarkerTargets() {
+    if (!world || !campaign) return [];
+    return markerTargets.filter((entry) =>
+      markerScope === "world"
+        ? entry.scope.kind === "world" && entry.scope.id === world.id
+        : (entry.scope.kind === "world" && entry.scope.id === world.id) ||
+          (entry.scope.kind === "campaign" && entry.scope.id === campaign.id),
+    );
+  }
+
+  async function handleMapClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (
+      !markerEditMode ||
+      !campaign ||
+      !world ||
+      !backgroundMedia ||
+      mapBounds.width <= 0
+    )
+      return;
+    const rectangle = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(
+      0,
+      Math.min(1, (event.clientX - rectangle.left) / rectangle.width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(1, (event.clientY - rectangle.top) / rectangle.height),
+    );
+    try {
+      if (selectedMarkerId) {
+        const updated = await updateMapMarker(
+          campaign.id,
+          backgroundMedia.id,
+          selectedMarkerId,
+          { x, y },
+        );
+        setMarkers((current) =>
+          current.map((marker) =>
+            marker.id === updated.id ? updated : marker,
+          ),
+        );
+      } else {
+        if (!markerEntryId) {
+          setError("Choose an Entry before placing a marker.");
+          return;
+        }
+        const created = await createMapMarker(campaign.id, backgroundMedia.id, {
+          entryId: markerEntryId,
+          scope: markerScope,
+          scopeId: markerScope === "world" ? world.id : campaign.id,
+          x,
+          y,
+          ...(markerLabel ? { label: markerLabel } : {}),
+        });
+        setMarkers((current) => [...current, created]);
+      }
+      setSelectedMarkerId(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not save the map marker.",
+      );
+    }
+  }
+
+  async function saveSelectedMarker() {
+    if (!campaign || !backgroundMedia || !selectedMarkerId || !markerEntryId)
+      return;
+    try {
+      await updateMapMarker(campaign.id, backgroundMedia.id, selectedMarkerId, {
+        entryId: markerEntryId,
+        label: markerLabel || null,
+      });
+      await refreshMarkers();
+      setSelectedMarkerId(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not update the map marker.",
+      );
+    }
+  }
+
+  async function removeSelectedMarker() {
+    if (!campaign || !backgroundMedia || !selectedMarkerId) return;
+    try {
+      await deleteMapMarker(campaign.id, backgroundMedia.id, selectedMarkerId);
+      setSelectedMarkerId(null);
+      await refreshMarkers();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not delete the map marker.",
+      );
+    }
+  }
 
   const hasDirtyWindows = state.windows.some(({ isDirty }) => isDirty);
 
@@ -833,16 +1034,207 @@ export function CampaignWorkspace() {
             campaign={campaign}
             revision={browserRevision}
             onError={setError}
+            mediaControls={
+              <section
+                className="workspace-media-controls"
+                aria-label="Workspace background"
+              >
+                <div className="section-heading">
+                  <h2>Background</h2>
+                  <button
+                    className="secondary compact"
+                    type="button"
+                    onClick={() =>
+                      void navigate(`/campaigns/${campaign.id}/media`)
+                    }
+                  >
+                    Library
+                  </button>
+                </div>
+                <label>
+                  Image or map
+                  <select
+                    value={backgroundMediaId ?? ""}
+                    onChange={(event) =>
+                      void saveBackground(event.target.value || null)
+                    }
+                  >
+                    <option value="">Neutral background</option>
+                    {media.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name} ({item.type === "MAP" ? "Map" : "Image"})
+                        {item.isArchived ? " — Archived" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <small aria-live="polite">
+                  {backgroundSaveState === "saving" && "Saving background…"}
+                  {backgroundSaveState === "saved" && "Background saved"}
+                  {backgroundSaveState === "failed" && (
+                    <button
+                      className="link-button"
+                      type="button"
+                      onClick={() =>
+                        void saveBackground(failedBackgroundId ?? null)
+                      }
+                    >
+                      Retry background save
+                    </button>
+                  )}
+                </small>
+                {backgroundMedia?.type === "MAP" &&
+                  backgroundMedia.isAvailable && (
+                    <div className="marker-editor-controls">
+                      <button
+                        type="button"
+                        className={markerEditMode ? "danger" : "secondary"}
+                        onClick={() => {
+                          setMarkerEditMode((active) => !active);
+                          setSelectedMarkerId(null);
+                        }}
+                      >
+                        {markerEditMode
+                          ? "Exit marker editing"
+                          : "Edit map markers"}
+                      </button>
+                      {markerEditMode && (
+                        <>
+                          {backgroundMedia.scope.kind === "world" && (
+                            <label>
+                              Marker scope
+                              <select
+                                value={markerScope}
+                                onChange={(event) => {
+                                  setMarkerScope(
+                                    event.target.value as "campaign" | "world",
+                                  );
+                                  setMarkerEntryId("");
+                                }}
+                              >
+                                <option value="campaign">Campaign</option>
+                                <option value="world">World</option>
+                              </select>
+                            </label>
+                          )}
+                          <label>
+                            Target Entry
+                            <select
+                              value={markerEntryId}
+                              onChange={(event) =>
+                                setMarkerEntryId(event.target.value)
+                              }
+                            >
+                              <option value="">Choose an Entry</option>
+                              {eligibleMarkerTargets().map((entry) => (
+                                <option key={entry.id} value={entry.id}>
+                                  {entry.title}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Optional label
+                            <input
+                              value={markerLabel}
+                              onChange={(event) =>
+                                setMarkerLabel(event.target.value)
+                              }
+                              maxLength={120}
+                            />
+                          </label>
+                          <small>
+                            {selectedMarkerId
+                              ? "Click the map to move the selected marker."
+                              : "Click the map to place a marker."}
+                          </small>
+                          {selectedMarkerId && (
+                            <div className="marker-actions">
+                              <button
+                                type="button"
+                                onClick={() => void saveSelectedMarker()}
+                              >
+                                Update target
+                              </button>
+                              <button
+                                className="secondary danger"
+                                type="button"
+                                onClick={() => void removeSelectedMarker()}
+                              >
+                                Delete marker
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+              </section>
+            }
           />
           <div
             className="workspace-canvas"
             ref={canvasRef}
             aria-label={`${campaign.name} workspace`}
           >
-            <div className="workspace-empty-state" aria-hidden="true">
-              <span>{campaign.name}</span>
-              <small>Open an Entry from the sidebar or press Ctrl K.</small>
-            </div>
+            {backgroundMedia?.isAvailable ? (
+              <div
+                className={`workspace-background-stage${markerEditMode ? " editing" : ""}`}
+                style={{
+                  left: mapBounds.left,
+                  top: mapBounds.top,
+                  width: mapBounds.width,
+                  height: mapBounds.height,
+                }}
+                onClick={(event) => void handleMapClick(event)}
+              >
+                <img
+                  src={backgroundMedia.urls.display}
+                  alt=""
+                  draggable={false}
+                />
+                {backgroundMedia.type === "MAP" &&
+                  markers.map((marker) => {
+                    const target = markerTargets.find(
+                      ({ id }) => id === marker.entryId,
+                    );
+                    return (
+                      <button
+                        key={marker.id}
+                        type="button"
+                        className={`map-marker${selectedMarkerId === marker.id ? " selected" : ""}`}
+                        style={{
+                          left: `${marker.x * 100}%`,
+                          top: `${marker.y * 100}%`,
+                        }}
+                        aria-label={`${marker.label ?? target?.title ?? "Map marker"}${marker.scope.kind === "world" ? " (World)" : " (Campaign)"}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (markerEditMode) {
+                            setSelectedMarkerId(marker.id);
+                            setMarkerEntryId(marker.entryId);
+                            setMarkerLabel(marker.label ?? "");
+                            setMarkerScope(marker.scope.kind);
+                          } else {
+                            void openEntryId(marker.entryId);
+                          }
+                        }}
+                      >
+                        <span aria-hidden="true">●</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="workspace-empty-state" aria-hidden="true">
+                <span>{campaign.name}</span>
+                <small>
+                  {backgroundMedia
+                    ? "The selected background is unavailable."
+                    : "Open an Entry from the sidebar or press Ctrl K."}
+                </small>
+              </div>
+            )}
             {state.windows.map((workspaceWindow) => {
               const entry = workspaceWindow.entry;
               return (

@@ -115,3 +115,41 @@ foundations, and follow the required type-by-type delivery sequence.
 Milestone 6 implementation is constrained by these ADRs. Game System defaults,
 structured deadlines, stat-block schemas, advanced faction mechanics, custom
 presets, and broader structured full-text indexing remain deferred.
+
+---
+
+## Milestone 7 Decisions
+
+### 2026-08-13 — Sessions, encounters, workspace utilities, and calendar
+
+**Context**
+
+Milestone 7 makes the application usable during play through explicit Session
+state and activity history, a deliberately limited Encounter tracker,
+persistent workspace utilities, and manual Campaign time with advisory
+reminders.
+
+**Decision**
+
+The human developer selected Option A for all twenty-five Milestone 7 design
+choices. The accepted decisions are recorded in:
+
+- ADR-022: Session lifecycle and activity audit
+- ADR-023: Encounter initiative and hit-point tracking
+- ADR-024: Campaign workspace utility windows
+- ADR-025: Campaign calendar, time, and reminders
+
+**Reasoning**
+
+The selected designs keep active-play state durable and explicit while
+preserving the application's DM-assistant boundary. Session history records
+meaningful semantic changes, Encounter tracking remains system-neutral, live
+tools fit the persistent floating workspace, and calendar reminders inform the
+DM without executing fictional events.
+
+**Consequences**
+
+Milestone 7 implementation is constrained by these ADRs. Narrative recap
+generation, combat automation, game-system rules, recurring reminders,
+irregular calendar rules, calendar-definition migration, utility pinning, and
+automatic event execution remain deferred.

@@ -1,7 +1,43 @@
 import type { JSONContent } from "@tiptap/core";
 
 export type ArchiveFilter = "active" | "archived" | "all";
-export type EntryType = "NPC" | "LOCATION" | "JOURNAL";
+export type EntryType =
+  "NPC" | "LOCATION" | "JOURNAL" | "QUEST" | "FACTION" | "ITEM";
+export type EntrySpecialization =
+  | {
+      type: "NPC";
+      portraitMediaId: string | null;
+      status: string | null;
+      currentLocationId: string | null;
+      inventories: InventoryDraft[];
+    }
+  | {
+      type: "LOCATION";
+      parentLocationId: string | null;
+      sortOrder: number;
+      inventories: InventoryDraft[];
+    }
+  | {
+      type: "QUEST";
+      status: string | null;
+      objectives: Array<{ id: string; text: string; completed: boolean }>;
+    }
+  | {
+      type: "FACTION";
+      status: string | null;
+      leaders: Array<{ id: string; npcId: string; role: string | null }>;
+    }
+  | { type: "JOURNAL" | "ITEM" };
+export interface InventoryDraft {
+  id: string;
+  name: string;
+  lines: Array<{
+    id: string;
+    itemId: string;
+    quantity: number;
+    note: string | null;
+  }>;
+}
 
 export interface World {
   id: string;
@@ -77,7 +113,14 @@ export interface Entry {
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
+  sections: string[];
+  specialization: EntrySpecialization;
 }
+
+export type EntrySaveInput = Pick<
+  Entry,
+  "title" | "document" | "sections" | "specialization"
+>;
 
 export type EntrySummary = Pick<
   Entry,
@@ -101,7 +144,8 @@ export type EntryBacklink =
       relationship: EntryRelationship;
       source: EntrySummary;
     }
-  | { kind: "inline"; source: EntrySummary };
+  | { kind: "inline"; source: EntrySummary }
+  | { kind: "specialized"; source: EntrySummary; label: string };
 
 export interface EntryKnowledge {
   outgoing: EntryRelationship[];
@@ -121,6 +165,15 @@ export interface SearchResult extends Entry {
 
 interface ListResponse<T> {
   items: T[];
+}
+
+export function listEntryStatuses(
+  scope: Entry["scope"],
+  type: "NPC" | "QUEST" | "FACTION",
+) {
+  return apiRequest<ListResponse<string>>(
+    `/api/${scope.kind === "world" ? "worlds" : "campaigns"}/${scope.id}/entry-statuses?type=${type}`,
+  );
 }
 
 interface ApiErrorResponse {
@@ -363,10 +416,12 @@ export function listWorldEntries(
   worldId: string,
   archive: ArchiveFilter,
   type?: EntryType,
+  status?: string,
 ) {
   const typeQuery = type ? `&type=${type}` : "";
+  const statusQuery = status ? `&status=${encodeURIComponent(status)}` : "";
   return apiRequest<ListResponse<Entry>>(
-    `/api/worlds/${worldId}/entries?archive=${archive}${typeQuery}`,
+    `/api/worlds/${worldId}/entries?archive=${archive}${typeQuery}${statusQuery}`,
   );
 }
 
@@ -374,16 +429,18 @@ export function listCampaignEntries(
   campaignId: string,
   archive: ArchiveFilter,
   type?: EntryType,
+  status?: string,
 ) {
   const typeQuery = type ? `&type=${type}` : "";
+  const statusQuery = status ? `&status=${encodeURIComponent(status)}` : "";
   return apiRequest<ListResponse<Entry>>(
-    `/api/campaigns/${campaignId}/entries?archive=${archive}${typeQuery}`,
+    `/api/campaigns/${campaignId}/entries?archive=${archive}${typeQuery}${statusQuery}`,
   );
 }
 
 export function createWorldEntry(
   worldId: string,
-  input: { type: EntryType; title: string },
+  input: { type: EntryType; title: string; preset?: string },
 ) {
   return apiRequest<Entry>(`/api/worlds/${worldId}/entries`, {
     method: "POST",
@@ -397,6 +454,7 @@ export function createCampaignEntry(
     type: EntryType;
     title: string;
     scope?: "campaign" | "world";
+    preset?: string;
   },
 ) {
   return apiRequest<Entry>(`/api/campaigns/${campaignId}/entries`, {
@@ -407,7 +465,12 @@ export function createCampaignEntry(
 
 export function updateEntry(
   id: string,
-  input: Partial<Pick<Entry, "title" | "document" | "isArchived">>,
+  input: Partial<
+    Pick<
+      Entry,
+      "title" | "document" | "isArchived" | "sections" | "specialization"
+    >
+  >,
 ) {
   return apiRequest<Entry>(`/api/entries/${id}`, {
     method: "PATCH",
@@ -464,6 +527,7 @@ export interface EntrySearchInput {
   archive?: ArchiveFilter;
   type?: EntryType;
   tag?: string;
+  status?: string;
   limit?: number;
 }
 
@@ -473,6 +537,7 @@ function searchQuery(input: EntrySearchInput) {
   if (input.archive) parameters.set("archive", input.archive);
   if (input.type) parameters.set("type", input.type);
   if (input.tag) parameters.set("tag", input.tag);
+  if (input.status) parameters.set("status", input.status);
   if (input.limit) parameters.set("limit", String(input.limit));
   return parameters.toString();
 }

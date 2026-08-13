@@ -116,6 +116,7 @@ describe("Entry API", () => {
         documentVersion: 2,
         documentText: "",
         inlineTargetIds: [],
+        sections: [],
       },
     );
     expect(response.body.scope).toEqual({ kind: "world", id: worldId });
@@ -140,6 +141,47 @@ describe("Entry API", () => {
       2,
       { kind: "world", worldId },
       expect.objectContaining({ title: "Shared city" }),
+    );
+  });
+
+  it("applies only type-compatible built-in presets", async () => {
+    await request(app(worldCampaignStore, entryStore))
+      .post(`/api/worlds/${worldId}/entries`)
+      .send({ type: "NPC", title: "Shopkeeper", preset: "merchant" })
+      .expect(201);
+    expect(entryStore.createEntry).toHaveBeenCalledWith(
+      { kind: "world", worldId },
+      expect.objectContaining({
+        sections: ["portrait", "status", "currentLocation", "inventory"],
+      }),
+    );
+
+    const invalid = await request(app(worldCampaignStore, entryStore))
+      .post(`/api/worlds/${worldId}/entries`)
+      .send({ type: "QUEST", title: "Missing crown", preset: "merchant" });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error.code).toBe("SPECIALIZATION_VALIDATION_ERROR");
+  });
+
+  it("validates and forwards an atomic specialized Entry update", async () => {
+    const objectiveId = "0198a5d0-3d4a-7000-8000-000000000020";
+    await request(app(worldCampaignStore, entryStore))
+      .patch(`/api/entries/${entryId}`)
+      .send({
+        title: "The Lost Crown",
+        sections: ["status", "objectives"],
+        specialization: {
+          type: "QUEST",
+          status: "Active",
+          objectives: [
+            { id: objectiveId, text: "Find the crown", completed: false },
+          ],
+        },
+      })
+      .expect(200);
+    expect(entryStore.updateEntry).toHaveBeenCalledWith(
+      entryId,
+      expect.objectContaining({ sections: ["status", "objectives"] }),
     );
   });
 

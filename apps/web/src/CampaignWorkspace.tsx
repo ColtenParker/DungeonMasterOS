@@ -20,6 +20,7 @@ import {
   createCampaignEntry,
   createWorldEntry,
   type Entry,
+  type EntrySaveInput,
   type EntryType,
   getCampaign,
   getCampaignWorkspace,
@@ -62,6 +63,9 @@ const typeLabels: Record<EntryType, string> = {
   NPC: "NPC",
   LOCATION: "Location",
   JOURNAL: "Journal",
+  QUEST: "Quest",
+  FACTION: "Faction",
+  ITEM: "Item",
 };
 
 interface WorkspaceEntryBrowserProps {
@@ -101,9 +105,11 @@ function WorkspaceEntryBrowser({
   const [searchText, setSearchText] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [newType, setNewType] = useState<EntryType>("NPC");
   const [newTitle, setNewTitle] = useState("");
+  const [newPreset, setNewPreset] = useState("blank");
   const [newScope, setNewScope] = useState<"campaign" | "world">("campaign");
 
   const refresh = useCallback(async () => {
@@ -115,10 +121,16 @@ function WorkspaceEntryBrowser({
             ...(activeQuery ? { query: activeQuery } : {}),
             ...(selectedType ? { type: selectedType } : {}),
             ...(tagFilter ? { tag: tagFilter } : {}),
+            ...(statusFilter ? { status: statusFilter } : {}),
           })
-        : await listCampaignEntries(campaign.id, archive, selectedType);
+        : await listCampaignEntries(
+            campaign.id,
+            archive,
+            selectedType,
+            statusFilter,
+          );
     setEntries(result.items);
-  }, [activeQuery, archive, campaign.id, tagFilter, type]);
+  }, [activeQuery, archive, campaign.id, statusFilter, tagFilter, type]);
 
   useEffect(() => {
     refresh().catch((reason: unknown) =>
@@ -145,6 +157,7 @@ function WorkspaceEntryBrowser({
         type: newType,
         title: newTitle,
         scope: newScope,
+        preset: newPreset,
       });
       setNewTitle("");
       openEntry(created);
@@ -221,6 +234,9 @@ function WorkspaceEntryBrowser({
             <option value="NPC">NPCs</option>
             <option value="LOCATION">Locations</option>
             <option value="JOURNAL">Journals</option>
+            <option value="QUEST">Quests</option>
+            <option value="FACTION">Factions</option>
+            <option value="ITEM">Items</option>
           </select>
         </label>
         <label>
@@ -235,6 +251,15 @@ function WorkspaceEntryBrowser({
             <option value="archived">Archived</option>
             <option value="all">All</option>
           </select>
+        </label>
+        <label>
+          Status
+          <input
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            maxLength={80}
+            placeholder="Any"
+          />
         </label>
         <label>
           Tag
@@ -271,15 +296,34 @@ function WorkspaceEntryBrowser({
               Type
               <select
                 value={newType}
-                onChange={(event) =>
-                  setNewType(event.target.value as EntryType)
-                }
+                onChange={(event) => {
+                  setNewType(event.target.value as EntryType);
+                  setNewPreset("blank");
+                }}
               >
                 <option value="NPC">NPC</option>
                 <option value="LOCATION">Location</option>
                 <option value="JOURNAL">Journal</option>
+                <option value="QUEST">Quest</option>
+                <option value="FACTION">Faction</option>
+                <option value="ITEM">Item</option>
               </select>
             </label>
+            {newType === "NPC" && (
+              <label>
+                Preset
+                <select
+                  value={newPreset}
+                  onChange={(event) => setNewPreset(event.target.value)}
+                >
+                  <option value="blank">Blank</option>
+                  <option value="merchant">Merchant</option>
+                  <option value="noble">Noble</option>
+                  <option value="guard">Guard</option>
+                  <option value="villain">Villain</option>
+                </select>
+              </label>
+            )}
             <label>
               Scope
               <select
@@ -357,7 +401,7 @@ interface WorkspaceEntryWindowProps {
     geometry: Pick<WorkspaceWindowDescriptor, "x" | "y" | "width" | "height">,
   ) => void;
   onDirtyChange: (isDirty: boolean) => void;
-  onSave: (input: Pick<Entry, "title" | "document">) => Promise<void>;
+  onSave: (input: EntrySaveInput) => Promise<void>;
   onArchive: () => Promise<void>;
   onSearchEntries: (query: string) => Promise<Entry[]>;
   onCreateLinkedEntry: (input: {
@@ -862,10 +906,7 @@ export function CampaignWorkspace() {
     }
   }
 
-  async function saveEntry(
-    entryId: string,
-    input: Pick<Entry, "title" | "document">,
-  ) {
+  async function saveEntry(entryId: string, input: EntrySaveInput) {
     try {
       const updated = await updateEntry(entryId, input);
       dispatch({ type: "entry-updated", entry: updated });

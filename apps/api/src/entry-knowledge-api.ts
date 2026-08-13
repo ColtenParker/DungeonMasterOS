@@ -15,7 +15,14 @@ import {
 } from "./entry-store.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
 
-const entryType = z.enum(["NPC", "LOCATION", "JOURNAL"]);
+const entryType = z.enum([
+  "NPC",
+  "LOCATION",
+  "JOURNAL",
+  "QUEST",
+  "FACTION",
+  "ITEM",
+]);
 const entryIdParams = z.object({ entryId: z.uuid() });
 const relationshipParams = z.object({
   entryId: z.uuid(),
@@ -41,6 +48,7 @@ const searchQuery = z
     archive: z.enum(["active", "archived", "all"]).default("active"),
     type: entryType.optional(),
     tag: tagName.optional(),
+    status: z.string().trim().min(1).max(80).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
   .refine((value) => value.q.length > 0 || value.tag !== undefined, {
@@ -232,6 +240,11 @@ export function createEntryKnowledgeRouter(
           ...knowledge.inlineBacklinks.map(({ source }) => ({
             kind: "inline" as const,
             source: serializeSummary(source),
+          })),
+          ...(knowledge.typedBacklinks ?? []).map(({ source, label }) => ({
+            kind: "specialized" as const,
+            source: serializeSummary(source),
+            label,
           })),
         ],
       });

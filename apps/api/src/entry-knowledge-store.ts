@@ -33,10 +33,16 @@ export interface InlineBacklinkRecord {
   source: EntrySummary;
 }
 
+export interface TypedBacklinkRecord {
+  source: EntrySummary;
+  label: string;
+}
+
 export interface EntryKnowledge {
   outgoing: RelationshipRecord[];
   backlinks: RelationshipRecord[];
   inlineBacklinks: InlineBacklinkRecord[];
+  typedBacklinks?: TypedBacklinkRecord[];
 }
 
 export interface TagRecord {
@@ -55,6 +61,7 @@ export interface SearchFilters {
   archive: ArchiveFilter;
   type?: EntryRecord["type"] | undefined;
   tag?: string | undefined;
+  status?: string | undefined;
   limit: number;
 }
 
@@ -222,7 +229,15 @@ export function createPrismaEntryKnowledgeStore(
     async getKnowledge(entryId) {
       const entry = await client.entry.findUnique({ where: { id: entryId } });
       if (!entry) return null;
-      const [outgoing, backlinks, inlineBacklinks] = await Promise.all([
+      const [
+        outgoing,
+        backlinks,
+        inlineBacklinks,
+        currentNpcs,
+        childLocations,
+        factionLeaderships,
+        inventoryLines,
+      ] = await Promise.all([
         client.entryRelationship.findMany({
           where: { sourceEntryId: entryId },
           include: { sourceEntry: true, targetEntry: true },
@@ -241,13 +256,59 @@ export function createPrismaEntryKnowledgeStore(
             { sourceEntryId: "asc" },
           ],
         }),
+        client.npcDetails.findMany({
+          where: { currentLocationId: entryId },
+          include: { entry: { select: entrySummarySelect } },
+        }),
+        client.locationDetails.findMany({
+          where: { parentLocationId: entryId },
+          include: { entry: { select: entrySummarySelect } },
+        }),
+        client.factionLeader.findMany({
+          where: { npcId: entryId },
+          include: {
+            faction: { include: { entry: { select: entrySummarySelect } } },
+          },
+        }),
+        client.inventoryLine.findMany({
+          where: { itemId: entryId },
+          include: {
+            inventory: { include: { owner: { select: entrySummarySelect } } },
+          },
+        }),
       ]);
+      const typed = [
+        ...currentNpcs.map(({ entry: source }) => ({
+          source,
+          label: "Current location",
+        })),
+        ...childLocations.map(({ entry: source }) => ({
+          source,
+          label: "Parent location",
+        })),
+        ...factionLeaderships.map(({ faction }) => ({
+          source: faction.entry,
+          label: "Faction leader",
+        })),
+        ...inventoryLines.map(({ inventory }) => ({
+          source: inventory.owner,
+          label: "Inventory item",
+        })),
+      ];
+      const typedBacklinks = [
+        ...new Map(
+          typed.map((item) => [`${item.label}:${item.source.id}`, item]),
+        ).values(),
+      ].sort((left, right) =>
+        left.source.title.localeCompare(right.source.title),
+      );
       return {
         outgoing: outgoing.map(relationshipRecord),
         backlinks: backlinks.map(relationshipRecord),
         inlineBacklinks: inlineBacklinks.map(({ sourceEntry }) => ({
           source: sourceEntry,
         })),
+        typedBacklinks,
       };
     },
     async listWorldTags(worldId, query) {
@@ -320,6 +381,13 @@ export function createPrismaEntryKnowledgeStore(
               AND tag_filter."normalizedName" = ${normalizeTagName(filters.tag)}
           )`
         : Prisma.sql`TRUE`;
+      const statusPredicate = filters.status
+        ? Prisma.sql`(
+            EXISTS (SELECT 1 FROM "NpcDetails" ns WHERE ns."entryId" = e."id" AND lower(ns."status") = lower(${filters.status}))
+            OR EXISTS (SELECT 1 FROM "QuestDetails" qs WHERE qs."entryId" = e."id" AND lower(qs."status") = lower(${filters.status}))
+            OR EXISTS (SELECT 1 FROM "FactionDetails" fs WHERE fs."entryId" = e."id" AND lower(fs."status") = lower(${filters.status}))
+          )`
+        : Prisma.sql`TRUE`;
       const query = filters.query;
       const rankSql = query
         ? Prisma.sql`
@@ -361,6 +429,7 @@ export function createPrismaEntryKnowledgeStore(
           AND ${archiveSql(filters.archive)}
           AND ${typePredicate}
           AND ${tagPredicate}
+          AND ${statusPredicate}
           AND ${queryPredicate}
         ORDER BY rank DESC, lower(e."title"), e."id"
         LIMIT ${filters.limit}

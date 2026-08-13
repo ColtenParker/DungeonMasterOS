@@ -14,6 +14,14 @@ const entry: Entry = {
   title: "Mira Vale",
   document: { type: "doc", content: [{ type: "paragraph" }] },
   documentVersion: 1,
+  sections: [],
+  specialization: {
+    type: "NPC",
+    portraitMediaId: null,
+    status: null,
+    currentLocationId: null,
+    inventories: [],
+  },
   scope: {
     kind: "world",
     id: "0198a5d0-3d4a-7000-8000-000000000001",

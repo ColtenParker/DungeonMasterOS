@@ -15,8 +15,90 @@ import {
   type EntryStore,
 } from "./entry-store.js";
 import type { WorldCampaignStore } from "./world-campaign-store.js";
+import {
+  EntrySpecializationValidationError,
+  sectionsForPreset,
+} from "./entry-specialization.js";
 
-const entryType = z.enum(["NPC", "LOCATION", "JOURNAL"]);
+const entryType = z.enum([
+  "NPC",
+  "LOCATION",
+  "JOURNAL",
+  "QUEST",
+  "FACTION",
+  "ITEM",
+]);
+const nullableText = (maximum: number) =>
+  z.string().trim().max(maximum).nullable();
+const inventoryLine = z
+  .object({
+    id: z.uuid(),
+    itemId: z.uuid(),
+    quantity: z.number().int().positive(),
+    note: nullableText(500),
+  })
+  .strict();
+const inventory = z
+  .object({
+    id: z.uuid(),
+    name: z.string().trim().min(1).max(120),
+    lines: z.array(inventoryLine).max(500),
+  })
+  .strict();
+const specialization = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("NPC"),
+      portraitMediaId: z.uuid().nullable(),
+      status: nullableText(80),
+      currentLocationId: z.uuid().nullable(),
+      inventories: z.array(inventory).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("LOCATION"),
+      parentLocationId: z.uuid().nullable(),
+      sortOrder: z.number().int().min(0),
+      inventories: z.array(inventory).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("QUEST"),
+      status: nullableText(80),
+      objectives: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              text: z.string().trim().min(1).max(500),
+              completed: z.boolean(),
+            })
+            .strict(),
+        )
+        .max(500),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("FACTION"),
+      status: nullableText(80),
+      leaders: z
+        .array(
+          z
+            .object({
+              id: z.uuid(),
+              npcId: z.uuid(),
+              role: nullableText(120),
+            })
+            .strict(),
+        )
+        .max(200),
+    })
+    .strict(),
+  z.object({ type: z.enum(["JOURNAL", "ITEM"]) }).strict(),
+]);
 const documentSchema = z.unknown().transform((value, context) => {
   try {
     return validateEntryDocument(value);
@@ -36,6 +118,7 @@ const entryInput = z
     type: entryType,
     title: z.string().trim().min(1).max(120),
     document: documentSchema.default(EMPTY_ENTRY_DOCUMENT),
+    preset: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
 const campaignEntryInput = entryInput.extend({
@@ -46,6 +129,8 @@ const entryUpdate = z
     title: z.string().trim().min(1).max(120).optional(),
     document: documentSchema.optional(),
     isArchived: z.boolean().optional(),
+    sections: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    specialization: specialization.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {
@@ -57,7 +142,9 @@ const campaignIdParams = z.object({ campaignId: z.uuid() });
 const entryQuery = z.object({
   archive: z.enum(["active", "archived", "all"]).default("active"),
   type: entryType.optional(),
+  status: z.string().trim().min(1).max(80).optional(),
 });
+const statusQuery = z.object({ type: z.enum(["NPC", "QUEST", "FACTION"]) });
 
 function validationError(error: ZodError) {
   const fields: Record<string, string[]> = {};
@@ -127,6 +214,8 @@ function serialize(record: EntryRecord) {
     isArchived: record.isArchived,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    sections: record.sections ?? [],
+    specialization: record.specialization ?? { type: record.type },
   };
 }
 
@@ -149,10 +238,12 @@ export function createEntryRouter(
         response.status(409).json(archivedScope("World"));
         return;
       }
+      const { preset, ...entryData } = input;
       const created = await entryStore.createEntry(
         { kind: "world", worldId },
         {
-          ...input,
+          ...entryData,
+          sections: sectionsForPreset(input.type, preset),
           documentVersion: ENTRY_DOCUMENT_VERSION,
           ...documentMetadata(input.document),
         },
@@ -165,6 +256,15 @@ export function createEntryRouter(
       }
       if (error instanceof EntryReferenceValidationError) {
         response.status(400).json(referenceValidationError(error));
+        return;
+      }
+      if (error instanceof EntrySpecializationValidationError) {
+        response.status(400).json({
+          error: {
+            code: "SPECIALIZATION_VALIDATION_ERROR",
+            message: error.message,
+          },
+        });
         return;
       }
       throw error;
@@ -194,6 +294,37 @@ export function createEntryRouter(
         response.status(400).json(referenceValidationError(error));
         return;
       }
+      if (error instanceof EntrySpecializationValidationError) {
+        response.status(400).json({
+          error: {
+            code: "SPECIALIZATION_VALIDATION_ERROR",
+            message: error.message,
+          },
+        });
+        return;
+      }
+      throw error;
+    }
+  });
+
+  router.get("/worlds/:worldId/entry-statuses", async (request, response) => {
+    try {
+      const { worldId } = worldIdParams.parse(request.params);
+      const { type } = statusQuery.parse(request.query);
+      if (!(await worldCampaignStore.findWorld(worldId))) {
+        response.status(404).json(notFound("World"));
+        return;
+      }
+      response.json({
+        items: entryStore.listStatuses
+          ? await entryStore.listStatuses({ kind: "world", worldId }, type)
+          : [],
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        response.status(400).json(validationError(error));
+        return;
+      }
       throw error;
     }
   });
@@ -220,13 +351,14 @@ export function createEntryRouter(
         response.status(409).json(archivedScope("Campaign"));
         return;
       }
-      const { scope, ...entryData } = input;
+      const { scope, preset, ...entryData } = input;
       const entryScope =
         scope === "world"
           ? { kind: "world" as const, worldId: world.id }
           : { kind: "campaign" as const, campaignId };
       const created = await entryStore.createEntry(entryScope, {
         ...entryData,
+        sections: sectionsForPreset(input.type, preset),
         documentVersion: ENTRY_DOCUMENT_VERSION,
         ...documentMetadata(entryData.document),
       });
@@ -238,6 +370,15 @@ export function createEntryRouter(
       }
       if (error instanceof EntryReferenceValidationError) {
         response.status(400).json(referenceValidationError(error));
+        return;
+      }
+      if (error instanceof EntrySpecializationValidationError) {
+        response.status(400).json({
+          error: {
+            code: "SPECIALIZATION_VALIDATION_ERROR",
+            message: error.message,
+          },
+        });
         return;
       }
       throw error;
@@ -272,6 +413,34 @@ export function createEntryRouter(
       throw error;
     }
   });
+
+  router.get(
+    "/campaigns/:campaignId/entry-statuses",
+    async (request, response) => {
+      try {
+        const { campaignId } = campaignIdParams.parse(request.params);
+        const { type } = statusQuery.parse(request.query);
+        if (!(await worldCampaignStore.findCampaign(campaignId))) {
+          response.status(404).json(notFound("Campaign"));
+          return;
+        }
+        response.json({
+          items: entryStore.listStatuses
+            ? await entryStore.listStatuses(
+                { kind: "campaign", campaignId },
+                type,
+              )
+            : [],
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          response.status(400).json(validationError(error));
+          return;
+        }
+        throw error;
+      }
+    },
+  );
 
   router.get("/entries/:id", async (request, response) => {
     try {
@@ -316,6 +485,15 @@ export function createEntryRouter(
       }
       if (error instanceof EntryReferenceValidationError) {
         response.status(400).json(referenceValidationError(error));
+        return;
+      }
+      if (error instanceof EntrySpecializationValidationError) {
+        response.status(400).json({
+          error: {
+            code: "SPECIALIZATION_VALIDATION_ERROR",
+            message: error.message,
+          },
+        });
         return;
       }
       throw error;

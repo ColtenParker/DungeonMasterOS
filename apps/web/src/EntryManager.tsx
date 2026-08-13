@@ -6,6 +6,7 @@ import {
   createCampaignEntry,
   createWorldEntry,
   type Entry,
+  type EntrySaveInput,
   type EntrySummary,
   type EntryType,
   getEntry,
@@ -26,6 +27,9 @@ const typeLabels: Record<EntryType, string> = {
   NPC: "NPC",
   LOCATION: "Location",
   JOURNAL: "Journal",
+  QUEST: "Quest",
+  FACTION: "Faction",
+  ITEM: "Item",
 };
 
 interface EntryManagerProps {
@@ -41,9 +45,11 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
   const [type, setType] = useState<EntryType | "all">("all");
   const [newType, setNewType] = useState<EntryType>("NPC");
   const [newTitle, setNewTitle] = useState("");
+  const [newPreset, setNewPreset] = useState("blank");
   const [searchText, setSearchText] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [newScope, setNewScope] = useState<"campaign" | "world">(
     campaign ? "campaign" : "world",
@@ -56,6 +62,7 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
       ...(activeQuery ? { query: activeQuery } : {}),
       ...(selectedType ? { type: selectedType } : {}),
       ...(tagFilter ? { tag: tagFilter } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
     };
     const result =
       activeQuery || tagFilter
@@ -63,10 +70,20 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
           ? await searchCampaignEntries(campaign.id, searchInput)
           : await searchWorldEntries(world.id, searchInput)
         : campaign
-          ? await listCampaignEntries(campaign.id, archive, selectedType)
-          : await listWorldEntries(world.id, archive, selectedType);
+          ? await listCampaignEntries(
+              campaign.id,
+              archive,
+              selectedType,
+              statusFilter,
+            )
+          : await listWorldEntries(
+              world.id,
+              archive,
+              selectedType,
+              statusFilter,
+            );
     setEntries(result.items);
-  }, [activeQuery, archive, campaign, tagFilter, type, world.id]);
+  }, [activeQuery, archive, campaign, statusFilter, tagFilter, type, world.id]);
 
   useEffect(() => {
     setSelectedEntry(null);
@@ -102,10 +119,12 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
             type: newType,
             title: newTitle,
             scope: newScope,
+            preset: newPreset,
           })
         : await createWorldEntry(world.id, {
             type: newType,
             title: newTitle,
+            preset: newPreset,
           });
       setNewTitle("");
       setSelectedEntry(created);
@@ -117,7 +136,7 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
     }
   }
 
-  async function save(input: Pick<Entry, "title" | "document">) {
+  async function save(input: EntrySaveInput) {
     if (!selectedEntry) return;
     try {
       const updated = await updateEntry(selectedEntry.id, input);
@@ -221,6 +240,9 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
                 <option value="NPC">NPCs</option>
                 <option value="LOCATION">Locations</option>
                 <option value="JOURNAL">Journals</option>
+                <option value="QUEST">Quests</option>
+                <option value="FACTION">Factions</option>
+                <option value="ITEM">Items</option>
               </select>
             </label>
             <label className="filter">
@@ -235,6 +257,15 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
                 <option value="archived">Archived</option>
                 <option value="all">All</option>
               </select>
+            </label>
+            <label className="filter">
+              Status
+              <input
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                maxLength={80}
+                placeholder="Any"
+              />
             </label>
             <label className="filter">
               Tag
@@ -291,15 +322,34 @@ export function EntryManager({ world, campaign, onError }: EntryManagerProps) {
               Entry type
               <select
                 value={newType}
-                onChange={(event) =>
-                  setNewType(event.target.value as EntryType)
-                }
+                onChange={(event) => {
+                  setNewType(event.target.value as EntryType);
+                  setNewPreset("blank");
+                }}
               >
                 <option value="NPC">NPC</option>
                 <option value="LOCATION">Location</option>
                 <option value="JOURNAL">Journal</option>
+                <option value="QUEST">Quest</option>
+                <option value="FACTION">Faction</option>
+                <option value="ITEM">Item</option>
               </select>
             </label>
+            {newType === "NPC" && (
+              <label>
+                Preset
+                <select
+                  value={newPreset}
+                  onChange={(event) => setNewPreset(event.target.value)}
+                >
+                  <option value="blank">Blank</option>
+                  <option value="merchant">Merchant</option>
+                  <option value="noble">Noble</option>
+                  <option value="guard">Guard</option>
+                  <option value="villain">Villain</option>
+                </select>
+              </label>
+            )}
             <label className="entry-title-field">
               New Entry title
               <input

@@ -243,7 +243,11 @@ export function EntryKnowledgePanel({
                 {backlink.source.title}
               </button>
               <small>
-                {backlink.kind === "inline" ? "Inline mention" : "Relationship"}
+                {backlink.kind === "inline"
+                  ? "Inline mention"
+                  : backlink.kind === "specialized"
+                    ? backlink.label
+                    : "Relationship"}
                 {backlink.source.isArchived ? " · Archived" : ""}
               </small>
             </li>

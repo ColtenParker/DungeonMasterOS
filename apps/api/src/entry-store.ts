@@ -7,6 +7,11 @@ import {
 import type { JSONContent } from "@tiptap/core";
 
 import type { ArchiveFilter } from "./world-campaign-store.js";
+import {
+  type EntrySpecialization,
+  loadEntrySpecialization,
+  saveEntrySpecialization,
+} from "./entry-specialization.js";
 
 export interface EntryRecord {
   id: string;
@@ -20,6 +25,8 @@ export interface EntryRecord {
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
+  sections?: string[];
+  specialization?: EntrySpecialization;
 }
 
 export type EntryScope =
@@ -32,6 +39,8 @@ export interface EntryInput {
   documentVersion: number;
   documentText: string;
   inlineTargetIds: string[];
+  sections?: string[] | undefined;
+  specialization?: EntrySpecialization | undefined;
 }
 
 export interface EntryUpdate {
@@ -41,6 +50,8 @@ export interface EntryUpdate {
   documentText?: string | undefined;
   inlineTargetIds?: string[] | undefined;
   isArchived?: boolean | undefined;
+  sections?: string[] | undefined;
+  specialization?: EntrySpecialization | undefined;
 }
 
 export class EntryReferenceValidationError extends Error {}
@@ -48,6 +59,7 @@ export class EntryReferenceValidationError extends Error {}
 export interface EntryFilters {
   archive: ArchiveFilter;
   type?: EntryType | undefined;
+  status?: string | undefined;
 }
 
 export interface EntryStore {
@@ -63,6 +75,10 @@ export interface EntryStore {
   ): Promise<EntryRecord[]>;
   findEntry(id: string): Promise<EntryRecord | null>;
   updateEntry(id: string, input: EntryUpdate): Promise<EntryRecord | null>;
+  listStatuses?(
+    scope: EntryScope,
+    type: "NPC" | "QUEST" | "FACTION",
+  ): Promise<string[]>;
 }
 
 function archiveWhere(archive: ArchiveFilter) {
@@ -74,8 +90,36 @@ function typeWhere(type: EntryType | undefined) {
   return type ? { type } : {};
 }
 
-function toEntry(record: Entry): EntryRecord {
-  return { ...record, document: record.document as JSONContent };
+function statusWhere(status: string | undefined): Prisma.EntryWhereInput {
+  if (!status) return {};
+  return {
+    OR: [
+      {
+        npcDetails: { is: { status: { equals: status, mode: "insensitive" } } },
+      },
+      {
+        questDetails: {
+          is: { status: { equals: status, mode: "insensitive" } },
+        },
+      },
+      {
+        factionDetails: {
+          is: { status: { equals: status, mode: "insensitive" } },
+        },
+      },
+    ],
+  };
+}
+
+async function toEntry(
+  transaction: Prisma.TransactionClient,
+  record: Entry,
+): Promise<EntryRecord> {
+  return {
+    ...record,
+    document: record.document as JSONContent,
+    ...(await loadEntrySpecialization(transaction, record)),
+  };
 }
 
 function byTitleThenId(left: EntryRecord, right: EntryRecord) {
@@ -188,32 +232,54 @@ export function createPrismaEntryStore(client: PrismaClient): EntryStore {
           created,
           input.inlineTargetIds,
         );
-        return toEntry(created);
+        await saveEntrySpecialization(
+          transaction,
+          created,
+          input.sections ?? [],
+          input.specialization,
+        );
+        return toEntry(transaction, created);
       });
     },
     async listWorldEntries(worldId, filters) {
-      const records = await client.entry.findMany({
-        where: {
-          worldId,
-          ...archiveWhere(filters.archive),
-          ...typeWhere(filters.type),
-        },
+      return client.$transaction(async (transaction) => {
+        const records = await transaction.entry.findMany({
+          where: {
+            worldId,
+            ...archiveWhere(filters.archive),
+            ...typeWhere(filters.type),
+            ...statusWhere(filters.status),
+          },
+        });
+        return (
+          await Promise.all(
+            records.map((record) => toEntry(transaction, record)),
+          )
+        ).sort(byTitleThenId);
       });
-      return records.map(toEntry).sort(byTitleThenId);
     },
     async listCampaignEntries(campaignId, worldId, filters) {
-      const records = await client.entry.findMany({
-        where: {
-          OR: [{ campaignId }, { worldId }],
-          ...archiveWhere(filters.archive),
-          ...typeWhere(filters.type),
-        },
+      return client.$transaction(async (transaction) => {
+        const records = await transaction.entry.findMany({
+          where: {
+            OR: [{ campaignId }, { worldId }],
+            ...archiveWhere(filters.archive),
+            ...typeWhere(filters.type),
+            ...statusWhere(filters.status),
+          },
+        });
+        return (
+          await Promise.all(
+            records.map((record) => toEntry(transaction, record)),
+          )
+        ).sort(byTitleThenId);
       });
-      return records.map(toEntry).sort(byTitleThenId);
     },
     async findEntry(id) {
-      const record = await client.entry.findUnique({ where: { id } });
-      return record ? toEntry(record) : null;
+      return client.$transaction(async (transaction) => {
+        const record = await transaction.entry.findUnique({ where: { id } });
+        return record ? toEntry(transaction, record) : null;
+      });
     },
     async updateEntry(id, input) {
       return client.$transaction(async (transaction) => {
@@ -228,13 +294,62 @@ export function createPrismaEntryStore(client: PrismaClient): EntryStore {
             input.inlineTargetIds,
           );
         }
-        return toEntry(
-          await transaction.entry.update({
-            where: { id },
-            data: updateData(input),
-          }),
-        );
+        const updated = await transaction.entry.update({
+          where: { id },
+          data: updateData(input),
+        });
+        if (
+          input.sections !== undefined ||
+          input.specialization !== undefined
+        ) {
+          const current = await loadEntrySpecialization(transaction, updated);
+          await saveEntrySpecialization(
+            transaction,
+            updated,
+            input.sections ?? current.sections,
+            input.specialization ?? current.specialization,
+          );
+        }
+        return toEntry(transaction, updated);
       });
+    },
+    async listStatuses(scope, type) {
+      const worldId =
+        scope.kind === "world"
+          ? scope.worldId
+          : (
+              await client.campaign.findUnique({
+                where: { id: scope.campaignId },
+                select: { worldId: true },
+              })
+            )?.worldId;
+      const entryWhere: Prisma.EntryWhereInput =
+        scope.kind === "world"
+          ? { worldId: scope.worldId }
+          : {
+              OR: [
+                { campaignId: scope.campaignId },
+                ...(worldId ? [{ worldId }] : []),
+              ],
+            };
+      const rows =
+        type === "NPC"
+          ? await client.npcDetails.findMany({
+              where: { status: { not: null }, entry: entryWhere },
+              select: { status: true },
+            })
+          : type === "QUEST"
+            ? await client.questDetails.findMany({
+                where: { status: { not: null }, entry: entryWhere },
+                select: { status: true },
+              })
+            : await client.factionDetails.findMany({
+                where: { status: { not: null }, entry: entryWhere },
+                select: { status: true },
+              });
+      return [
+        ...new Set(rows.flatMap(({ status }) => (status ? [status] : []))),
+      ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     },
   };
 }

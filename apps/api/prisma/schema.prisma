@@ -8,12 +8,12 @@ datasource db {
 }
 
 model World {
-  id          String     @id @default(uuid(7)) @db.Uuid
-  name        String     @db.VarChar(120)
-  description String?    @db.VarChar(5000)
-  isArchived  Boolean    @default(false)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id          String      @id @default(uuid(7)) @db.Uuid
+  name        String      @db.VarChar(120)
+  description String?     @db.VarChar(5000)
+  isArchived  Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   campaigns   Campaign[]
   entries     Entry[]
   tags        Tag[]
@@ -24,14 +24,14 @@ model World {
 }
 
 model Campaign {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  worldId     String   @db.Uuid
-  name        String   @db.VarChar(120)
-  description String?  @db.VarChar(5000)
-  isArchived  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  world       World    @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  id          String             @id @default(uuid(7)) @db.Uuid
+  worldId     String             @db.Uuid
+  name        String             @db.VarChar(120)
+  description String?            @db.VarChar(5000)
+  isArchived  Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  world       World              @relation(fields: [worldId], references: [id], onDelete: Restrict)
   entries     Entry[]
   workspace   CampaignWorkspace?
   media       Media[]
@@ -73,6 +73,9 @@ enum EntryType {
   NPC
   LOCATION
   JOURNAL
+  QUEST
+  FACTION
+  ITEM
 }
 
 enum MediaType {
@@ -81,30 +84,143 @@ enum MediaType {
 }
 
 model Entry {
-  id              String    @id @default(uuid(7)) @db.Uuid
-  type            EntryType
-  title           String    @db.VarChar(120)
-  document        Json
-  documentVersion Int       @default(1)
-  documentText    String    @default("") @db.Text
-  searchVector    Unsupported("tsvector")?
-  worldId         String?   @db.Uuid
-  campaignId      String?   @db.Uuid
-  isArchived      Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  world           World?    @relation(fields: [worldId], references: [id], onDelete: Restrict)
-  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  outgoingRelationships EntryRelationship[] @relation("EntryRelationshipSource")
-  incomingRelationships EntryRelationship[] @relation("EntryRelationshipTarget")
-  outgoingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceSource")
-  incomingInlineReferences EntryInlineReference[] @relation("EntryInlineReferenceTarget")
-  tagAssignments EntryTag[]
-  workspaceWindows WorkspaceEntryWindow[]
-  mapMarkers MapMarker[]
+  id                       String                   @id @default(uuid(7)) @db.Uuid
+  type                     EntryType
+  title                    String                   @db.VarChar(120)
+  document                 Json
+  documentVersion          Int                      @default(1)
+  documentText             String                   @default("") @db.Text
+  searchVector             Unsupported("tsvector")?
+  worldId                  String?                  @db.Uuid
+  campaignId               String?                  @db.Uuid
+  isArchived               Boolean                  @default(false)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  world                    World?                   @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  campaign                 Campaign?                @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  outgoingRelationships    EntryRelationship[]      @relation("EntryRelationshipSource")
+  incomingRelationships    EntryRelationship[]      @relation("EntryRelationshipTarget")
+  outgoingInlineReferences EntryInlineReference[]   @relation("EntryInlineReferenceSource")
+  incomingInlineReferences EntryInlineReference[]   @relation("EntryInlineReferenceTarget")
+  tagAssignments           EntryTag[]
+  workspaceWindows         WorkspaceEntryWindow[]
+  mapMarkers               MapMarker[]
+  sections                 EntrySection[]
+  npcDetails               NpcDetails?              @relation("NpcEntry")
+  currentNpcs              NpcDetails[]             @relation("NpcCurrentLocation")
+  locationDetails          LocationDetails?         @relation("LocationEntry")
+  childLocations           LocationDetails[]        @relation("LocationParent")
+  questDetails             QuestDetails?
+  factionDetails           FactionDetails?          @relation("FactionEntry")
+  factionLeaderships       FactionLeader[]          @relation("FactionLeaderNpc")
+  inventories              Inventory[]              @relation("InventoryOwner")
+  inventoryLines           InventoryLine[]          @relation("InventoryItem")
 
   @@index([worldId, type, isArchived])
   @@index([campaignId, type, isArchived])
+}
+
+model EntrySection {
+  entryId  String @db.Uuid
+  key      String @db.VarChar(40)
+  position Int
+  entry    Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, key])
+  @@unique([entryId, position])
+}
+
+model NpcDetails {
+  entryId           String  @id @db.Uuid
+  portraitMediaId   String? @db.Uuid
+  status            String? @db.VarChar(80)
+  currentLocationId String? @db.Uuid
+  entry             Entry   @relation("NpcEntry", fields: [entryId], references: [id], onDelete: Cascade)
+  portraitMedia     Media?  @relation(fields: [portraitMediaId], references: [id], onDelete: Restrict)
+  currentLocation   Entry?  @relation("NpcCurrentLocation", fields: [currentLocationId], references: [id], onDelete: Restrict)
+
+  @@index([portraitMediaId])
+  @@index([currentLocationId])
+  @@index([status])
+}
+
+model LocationDetails {
+  entryId          String  @id @db.Uuid
+  parentLocationId String? @db.Uuid
+  sortOrder        Int     @default(0)
+  entry            Entry   @relation("LocationEntry", fields: [entryId], references: [id], onDelete: Cascade)
+  parentLocation   Entry?  @relation("LocationParent", fields: [parentLocationId], references: [id], onDelete: Restrict)
+
+  @@index([parentLocationId, sortOrder])
+}
+
+model QuestDetails {
+  entryId    String           @id @db.Uuid
+  status     String?          @db.VarChar(80)
+  entry      Entry            @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  objectives QuestObjective[]
+
+  @@index([status])
+}
+
+model QuestObjective {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  questId   String       @db.Uuid
+  text      String       @db.VarChar(500)
+  completed Boolean      @default(false)
+  position  Int
+  quest     QuestDetails @relation(fields: [questId], references: [entryId], onDelete: Cascade)
+
+  @@unique([questId, position])
+  @@index([questId])
+}
+
+model FactionDetails {
+  entryId String          @id @db.Uuid
+  status  String?         @db.VarChar(80)
+  entry   Entry           @relation("FactionEntry", fields: [entryId], references: [id], onDelete: Cascade)
+  leaders FactionLeader[]
+
+  @@index([status])
+}
+
+model FactionLeader {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  factionId String         @db.Uuid
+  npcId     String         @db.Uuid
+  role      String?        @db.VarChar(120)
+  position  Int
+  faction   FactionDetails @relation(fields: [factionId], references: [entryId], onDelete: Cascade)
+  npc       Entry          @relation("FactionLeaderNpc", fields: [npcId], references: [id], onDelete: Restrict)
+
+  @@unique([factionId, position])
+  @@index([npcId])
+}
+
+model Inventory {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  ownerEntryId String          @db.Uuid
+  name         String          @db.VarChar(120)
+  position     Int
+  owner        Entry           @relation("InventoryOwner", fields: [ownerEntryId], references: [id], onDelete: Cascade)
+  lines        InventoryLine[]
+
+  @@unique([ownerEntryId, position])
+  @@index([ownerEntryId])
+}
+
+model InventoryLine {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  inventoryId String    @db.Uuid
+  itemId      String    @db.Uuid
+  quantity    Int
+  note        String?   @db.VarChar(500)
+  position    Int
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  item        Entry     @relation("InventoryItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([inventoryId, position])
+  @@index([itemId])
 }
 
 model Media {
@@ -130,6 +246,7 @@ model Media {
   campaign            Campaign?           @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   workspaceBackground CampaignWorkspace[]
   markers             MapMarker[]
+  npcPortraits        NpcDetails[]
 
   @@index([worldId, type, isArchived])
   @@index([campaignId, type, isArchived])
@@ -137,19 +254,19 @@ model Media {
 }
 
 model MapMarker {
-  id         String   @id @default(uuid(7)) @db.Uuid
-  mediaId    String   @db.Uuid
-  entryId    String   @db.Uuid
-  worldId    String?  @db.Uuid
-  campaignId String?  @db.Uuid
-  x          Decimal  @db.Decimal(10, 9)
-  y          Decimal  @db.Decimal(10, 9)
-  label      String?  @db.VarChar(120)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Restrict)
-  entry      Entry    @relation(fields: [entryId], references: [id], onDelete: Restrict)
-  world      World?   @relation(fields: [worldId], references: [id], onDelete: Restrict)
+  id         String    @id @default(uuid(7)) @db.Uuid
+  mediaId    String    @db.Uuid
+  entryId    String    @db.Uuid
+  worldId    String?   @db.Uuid
+  campaignId String?   @db.Uuid
+  x          Decimal   @db.Decimal(10, 9)
+  y          Decimal   @db.Decimal(10, 9)
+  label      String?   @db.VarChar(120)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  media      Media     @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  entry      Entry     @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  world      World?    @relation(fields: [worldId], references: [id], onDelete: Restrict)
   campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@index([mediaId, worldId])

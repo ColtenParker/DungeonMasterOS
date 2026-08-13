@@ -78,3 +78,40 @@ Media is managed in a dedicated library and referenced by Entries.
 ### Import warnings are resolvable
 
 Missing references may be linked, removed, or ignored rather than automatically guessed or treated as hard failures.
+
+---
+
+## Milestone 6 Decisions
+
+### 2026-08-13 — Specialized TTRPG Entry architecture
+
+**Context**
+
+Milestone 6 requires useful structured behavior for NPCs, Locations, Quests,
+Factions, Items, Inventories, and presets while preserving free-form Entry
+documents.
+
+**Decision**
+
+The human developer selected Option A for all twenty Milestone 6 design choices.
+The accepted decisions are recorded in:
+
+- ADR-015: Specialized Entry sections and persistence
+- ADR-016: NPC structured sections
+- ADR-017: Location hierarchy
+- ADR-018: Quest structured sections
+- ADR-019: Faction structured sections
+- ADR-020: Item Library and inventories
+- ADR-021: Entry presets and default layouts
+
+**Reasoning**
+
+The selected designs add relational structure only where the application can
+provide concrete behavior, preserve the universal Entry and rich-document
+foundations, and follow the required type-by-type delivery sequence.
+
+**Consequences**
+
+Milestone 6 implementation is constrained by these ADRs. Game System defaults,
+structured deadlines, stat-block schemas, advanced faction mechanics, custom
+presets, and broader structured full-text indexing remain deferred.
